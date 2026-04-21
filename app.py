@@ -55,18 +55,23 @@ fig = px.bar(top10, x="Spending_B", y="Brnd_Name", orientation="h",
              text="Spending_B")
 fig.update_traces(texttemplate="%{text}B", textposition="outside")
 fig.update_layout(yaxis={"categoryorder": "total ascending"})
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, use_container_width=True, height=400)
 
 # Raw data table
 if search_term:
     st.divider()
     st.subheader(f"Search Results for '{search_term}'")
-    st.dataframe(
+    display_df = (
         filtered[["Brnd_Name", "Gnrc_Name", "Tot_Spndng", "Tot_Benes", "Avg_Spnd_Per_Bene", "Year"]]
+        .drop_duplicates()
         .sort_values("Tot_Spndng", ascending=False)
-        .head(50),
-        use_container_width=True
+        .head(50)
+        .copy()
     )
+    display_df["Tot_Spndng"] = display_df["Tot_Spndng"].apply(lambda x: f"${x/1e9:.2f}B")
+    display_df["Avg_Spnd_Per_Bene"] = display_df["Avg_Spnd_Per_Bene"].apply(lambda x: f"${x:,.0f}")
+    display_df.columns = ["Brand", "Generic", "Total Spending", "Beneficiaries", "Avg/Beneficiary", "Year"]
+    st.dataframe(display_df, use_container_width=True)
 
 st.divider()
 
@@ -88,6 +93,37 @@ if not glp1_df.empty:
         labels={"Spending_B": "Total Spending ($B)", "Brnd_Name": "Drug", "Year": "Period"},
         color_discrete_sequence=px.colors.qualitative.Set2
     )
-    st.plotly_chart(fig2, use_container_width=True)
+    st.plotly_chart(fig2, use_container_width=True, height=400)
 else:
     st.info("No GLP-1 data found.")
+
+st.divider()
+
+# Affordability Section
+st.subheader("💰 Most Expensive Drugs Per Beneficiary")
+st.markdown("Total spending can be misleading — this shows the average cost per patient.")
+
+df["Avg_Spnd_Per_Bene"] = pd.to_numeric(df["Avg_Spnd_Per_Bene"], errors="coerce")
+
+afford = (
+    filtered[filtered["Tot_Benes"] >= 100]  # filter out tiny sample sizes
+    .groupby("Brnd_Name")["Avg_Spnd_Per_Bene"]
+    .mean()
+    .nlargest(10)
+    .reset_index()
+)
+afford["Avg_Spnd_Per_Bene"] = afford["Avg_Spnd_Per_Bene"].round(0)
+
+fig3 = px.bar(
+    afford,
+    x="Avg_Spnd_Per_Bene",
+    y="Brnd_Name",
+    orientation="h",
+    labels={"Avg_Spnd_Per_Bene": "Avg Spend Per Beneficiary ($)", "Brnd_Name": "Drug"},
+    color="Avg_Spnd_Per_Bene",
+    color_continuous_scale="Reds",
+    text="Avg_Spnd_Per_Bene"
+)
+fig3.update_traces(texttemplate="$%{text:,.0f}", textposition="outside")
+fig3.update_layout(yaxis={"categoryorder": "total ascending"})
+st.plotly_chart(fig3, use_container_width=True, height=400)
