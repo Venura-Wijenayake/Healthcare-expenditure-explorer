@@ -151,3 +151,26 @@ fig3 = px.bar(
 fig3.update_traces(texttemplate="$%{text:,.0f}", textposition="outside")
 fig3.update_layout(yaxis={"categoryorder": "total ascending"})
 st.plotly_chart(fig3, use_container_width=True, height=400)
+
+st.divider()
+
+# Generic vs Brand
+st.subheader("💊 Brand vs Generic Spending")
+st.markdown("Generic drugs are chemically identical to brands but cost significantly less.")
+
+filtered = filtered.copy()
+filtered["Drug_Type"] = filtered.apply(
+    lambda row: "Generic" if str(row["Brnd_Name"]).strip().lower() == str(row["Gnrc_Name"]).strip().lower() else "Brand",
+    axis=1
+)
+
+type_summary = filtered.groupby("Drug_Type")["Tot_Spndng"].sum().reset_index()
+type_summary["Spending_B"] = (type_summary["Tot_Spndng"] / 1e9).round(1)
+
+fig4 = px.pie(
+    type_summary,
+    values="Spending_B",
+    names="Drug_Type",
+    color_discrete_sequence=["#2196F3", "#4CAF50"]
+)
+st.plotly_chart(fig4, use_container_width=True, height=400)
