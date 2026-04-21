@@ -3,14 +3,12 @@ import pandas as pd
 import plotly.express as px
 from data_loader import fetch_part_d_data
 
-# Page config
 st.set_page_config(
     page_title="U.S. Healthcare Expenditure Explorer",
     page_icon="🏥",
     layout="wide"
 )
 
-# Header
 st.title("🏥 U.S. Healthcare Expenditure Explorer")
 st.markdown("Exploring Medicare drug and equipment spending across the United States.")
 
@@ -18,24 +16,52 @@ st.markdown("Exploring Medicare drug and equipment spending across the United St
 with st.spinner("Loading Medicare Part D data..."):
     df = fetch_part_d_data()
 
-# Clean spending column
+# Clean columns
 df["Tot_Spndng"] = pd.to_numeric(df["Tot_Spndng"], errors="coerce")
 df["Tot_Benes"] = pd.to_numeric(df["Tot_Benes"], errors="coerce")
 df = df.dropna(subset=["Tot_Spndng"])
 
-# Metrics row
+# Sidebar filters
+st.sidebar.header("Filters")
+
+years = sorted(df["Year"].unique().tolist())
+selected_year = st.sidebar.selectbox("Select Year", years, index=len(years)-1)
+
+search_term = st.sidebar.text_input("Search Drug Name", "")
+
+# Filter data
+filtered = df[df["Year"] == selected_year]
+if search_term:
+    filtered = filtered[
+        filtered["Brnd_Name"].str.contains(search_term, case=False, na=False) |
+        filtered["Gnrc_Name"].str.contains(search_term, case=False, na=False)
+    ]
+
+# Metrics
 col1, col2, col3 = st.columns(3)
-col1.metric("Total Drugs", f"{df['Brnd_Name'].nunique():,}")
-col2.metric("Total Spending", f"${df['Tot_Spndng'].sum()/1e9:.1f}B")
-col3.metric("Total Beneficiaries", f"{df['Tot_Benes'].sum()/1e6:.1f}M")
+col1.metric("Total Drugs", f"{filtered['Brnd_Name'].nunique():,}")
+col2.metric("Total Spending", f"${filtered['Tot_Spndng'].sum()/1e9:.1f}B")
+col3.metric("Total Beneficiaries", f"{filtered['Tot_Benes'].sum()/1e6:.1f}M")
 
 st.divider()
 
 # Top 10 drugs by spending
-st.subheader("Top 10 Drugs by Total Spending")
-top10 = df.groupby("Brnd_Name")["Tot_Spndng"].sum().nlargest(10).reset_index()
+st.subheader(f"Top 10 Drugs by Total Spending ({selected_year})")
+top10 = filtered.groupby("Brnd_Name")["Tot_Spndng"].sum().nlargest(10).reset_index()
 fig = px.bar(top10, x="Tot_Spndng", y="Brnd_Name", orientation="h",
              labels={"Tot_Spndng": "Total Spending ($)", "Brnd_Name": "Drug"},
              color="Tot_Spndng", color_continuous_scale="Blues")
 fig.update_layout(yaxis={"categoryorder": "total ascending"})
 st.plotly_chart(fig, use_container_width=True)
+
+st.divider()
+
+# Raw data table
+if search_term:
+    st.subheader(f"Search Results for '{search_term}'")
+    st.dataframe(
+        filtered[["Brnd_Name", "Gnrc_Name", "Tot_Spndng", "Tot_Benes", "Avg_Spnd_Per_Bene", "Year"]]
+        .sort_values("Tot_Spndng", ascending=False)
+        .head(50),
+        use_container_width=True
+    )
