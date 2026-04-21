@@ -45,6 +45,21 @@ col3.metric("Total Beneficiaries", f"{filtered['Tot_Benes'].sum()/1e6:.1f}M")
 
 st.divider()
 
+# Auto insights
+st.subheader("📊 Key Insights")
+col_a, col_b = st.columns(2)
+
+# Insight 1: Top spending drug
+top_drug = filtered.groupby("Brnd_Name")["Tot_Spndng"].sum().idxmax()
+top_spend = filtered.groupby("Brnd_Name")["Tot_Spndng"].sum().max()
+col_a.info(f"💊 **{top_drug}** is the highest spending drug at **${top_spend/1e9:.1f}B** in {selected_year}")
+
+# Insight 2: Most expensive per patient
+df["Avg_Spnd_Per_Bene"] = pd.to_numeric(df["Avg_Spnd_Per_Bene"], errors="coerce")
+expensive_drug = filtered[filtered["Tot_Benes"] >= 100].groupby("Brnd_Name")["Avg_Spnd_Per_Bene"].mean().idxmax()
+expensive_cost = filtered[filtered["Tot_Benes"] >= 100].groupby("Brnd_Name")["Avg_Spnd_Per_Bene"].mean().max()
+col_b.warning(f"💰 **{expensive_drug}** costs an average of **${expensive_cost:,.0f}** per patient in {selected_year}")
+
 # Top 10 drugs by spending
 st.subheader(f"Top 10 Drugs by Total Spending ({selected_year})")
 top10 = filtered.groupby("Brnd_Name")["Tot_Spndng"].sum().nlargest(10).reset_index()
