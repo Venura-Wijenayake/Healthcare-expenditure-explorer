@@ -48,9 +48,12 @@ st.divider()
 # Top 10 drugs by spending
 st.subheader(f"Top 10 Drugs by Total Spending ({selected_year})")
 top10 = filtered.groupby("Brnd_Name")["Tot_Spndng"].sum().nlargest(10).reset_index()
-fig = px.bar(top10, x="Tot_Spndng", y="Brnd_Name", orientation="h",
-             labels={"Tot_Spndng": "Total Spending ($)", "Brnd_Name": "Drug"},
-             color="Tot_Spndng", color_continuous_scale="Blues")
+top10["Spending_B"] = (top10["Tot_Spndng"] / 1e9).round(1)
+fig = px.bar(top10, x="Spending_B", y="Brnd_Name", orientation="h",
+             labels={"Spending_B": "Total Spending ($B)", "Brnd_Name": "Drug"},
+             color="Spending_B", color_continuous_scale="Blues",
+             text="Spending_B")
+fig.update_traces(texttemplate="%{text}B", textposition="outside")
 fig.update_layout(yaxis={"categoryorder": "total ascending"})
 st.plotly_chart(fig, use_container_width=True)
 
