@@ -57,10 +57,9 @@ fig.update_traces(texttemplate="%{text}B", textposition="outside")
 fig.update_layout(yaxis={"categoryorder": "total ascending"})
 st.plotly_chart(fig, use_container_width=True)
 
-st.divider()
-
 # Raw data table
 if search_term:
+    st.divider()
     st.subheader(f"Search Results for '{search_term}'")
     st.dataframe(
         filtered[["Brnd_Name", "Gnrc_Name", "Tot_Spndng", "Tot_Benes", "Avg_Spnd_Per_Bene", "Year"]]
@@ -68,3 +67,27 @@ if search_term:
         .head(50),
         use_container_width=True
     )
+
+st.divider()
+
+# GLP-1 Spotlight
+st.subheader("🔬 GLP-1 Spotlight — Ozempic & Mounjaro")
+st.markdown("GLP-1 drugs are the fastest growing drug category in Medicare spending.")
+
+glp1_drugs = ["Ozempic", "Mounjaro", "Trulicity", "Victoza", "Rybelsus", "Wegovy"]
+glp1_df = df[df["Brnd_Name"].isin(glp1_drugs)].copy()
+glp1_df["Spending_B"] = (glp1_df["Tot_Spndng"] / 1e9).round(2)
+
+if not glp1_df.empty:
+    fig2 = px.bar(
+        glp1_df,
+        x="Year",
+        y="Spending_B",
+        color="Brnd_Name",
+        barmode="group",
+        labels={"Spending_B": "Total Spending ($B)", "Brnd_Name": "Drug", "Year": "Period"},
+        color_discrete_sequence=px.colors.qualitative.Set2
+    )
+    st.plotly_chart(fig2, use_container_width=True)
+else:
+    st.info("No GLP-1 data found.")
