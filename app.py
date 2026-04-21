@@ -174,3 +174,9 @@ fig4 = px.pie(
     color_discrete_sequence=["#2196F3", "#4CAF50"]
 )
 st.plotly_chart(fig4, use_container_width=True, height=400)
+
+st.divider()
+
+# US State Map (placeholder - state data coming in Phase 2)
+st.subheader("🗺️ Medicare Spending by State")
+st.info("🚧 State-level geographic data pipeline in progress — coming in next update.")
