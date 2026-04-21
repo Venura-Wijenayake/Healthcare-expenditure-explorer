@@ -73,6 +73,15 @@ if search_term:
     display_df.columns = ["Brand", "Generic", "Total Spending", "Beneficiaries", "Avg/Beneficiary", "Year"]
     st.dataframe(display_df, use_container_width=True)
 
+    # Download button
+    csv = display_df.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        label="📥 Download Results as CSV",
+        data=csv,
+        file_name=f"{search_term}_results.csv",
+        mime="text/csv"
+    )
+
 st.divider()
 
 # GLP-1 Spotlight
