@@ -263,6 +263,45 @@ else:
 
 st.divider()
 
+# Top Manufacturers
+st.subheader("🏭 Top Drug Manufacturers by Medicare Spending")
+st.markdown("Which pharmaceutical companies collect the most Medicare Part D dollars.")
+
+df["Tot_Mftr"] = pd.to_numeric(df["Tot_Mftr"], errors="coerce")
+
+mftr_col = "Mftr_Name" if "Mftr_Name" in filtered.columns else None
+
+total_mftr_spend = filtered[~filtered[mftr_col].str.contains("Overall", case=False, na=False)]["Tot_Spndng"].sum()
+st.info(f"💊 Total Medicare Part D spending across all manufacturers in {selected_year}: **${total_mftr_spend/1e9:.1f}B**")
+
+if mftr_col:
+    top_mftr = (
+    filtered[~filtered[mftr_col].str.contains("Overall", case=False, na=False)]
+    .groupby(mftr_col)["Tot_Spndng"]
+    .sum()
+    .nlargest(10)
+    .reset_index()
+    )
+    top_mftr["Spending_B"] = (top_mftr["Tot_Spndng"] / 1e9).round(2)
+    top_mftr.columns = ["Manufacturer", "Tot_Spndng", "Spending ($B)"]
+
+    fig7 = px.bar(
+        top_mftr,
+        x="Spending ($B)",
+        y="Manufacturer",
+        orientation="h",
+        text="Spending ($B)",
+        color="Spending ($B)",
+        color_continuous_scale="Purples"
+    )
+    fig7.update_traces(texttemplate="%{text}B", textposition="outside")
+    fig7.update_layout(yaxis={"categoryorder": "total ascending"})
+    st.plotly_chart(fig7, use_container_width=True)
+else:
+    st.info("Manufacturer data not available in current dataset.")
+
+st.divider()
+
 # US State Map (placeholder - state data coming in Phase 2)
 st.subheader("🗺️ Medicare Spending by State")
 st.info("🚧 State-level geographic data pipeline in progress — coming in next update.")
