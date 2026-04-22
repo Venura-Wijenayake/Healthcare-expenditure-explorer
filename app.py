@@ -223,6 +223,46 @@ else:
 
 st.divider()
 
+# Year-over-year % change
+st.subheader("📈 Fastest Growing Drugs (Year-over-Year)")
+st.markdown("Drugs with the biggest spending increase from 2024 to 2025.")
+st.caption("⚠️ Note: 2025 data covers Q1-Q2 only. Growth rates may be understated compared to full-year 2024.")
+
+yoy_df = df.groupby(["Brnd_Name", "Year"])["Tot_Spndng"].sum().reset_index()
+pivot = yoy_df.pivot(index="Brnd_Name", columns="Year", values="Tot_Spndng").reset_index()
+pivot.columns.name = None
+
+years = sorted(df["Year"].unique().tolist())
+if len(years) >= 2:
+    col_2024 = years[0]
+    col_2025 = years[1]
+    pivot = pivot.dropna(subset=[col_2024, col_2025])
+    pivot = pivot[pivot[col_2024] >= 1e8]  # minimum $100M in 2024 to qualify
+    pivot["YoY_%"] = ((pivot[col_2025] - pivot[col_2024]) / pivot[col_2024] * 100).round(1)
+    
+    top_growers = pivot.nlargest(10, "YoY_%")[["Brnd_Name", col_2024, col_2025, "YoY_%"]].copy()
+    top_growers[col_2024] = (top_growers[col_2024] / 1e9).round(2)
+    top_growers[col_2025] = (top_growers[col_2025] / 1e9).round(2)
+    top_growers.columns = ["Drug", "2024 ($B)", "2025 ($B)", "Growth %"]
+
+    fig6 = px.bar(
+        top_growers,
+        x="Growth %",
+        y="Drug",
+        orientation="h",
+        text="Growth %",
+        color="Growth %",
+        color_continuous_scale="Greens"
+    )
+    fig6.update_traces(texttemplate="%{text}%", textposition="outside")
+    fig6.update_layout(yaxis={"categoryorder": "total ascending"})
+    st.plotly_chart(fig6, use_container_width=True)
+    st.dataframe(top_growers, use_container_width=True, hide_index=True)
+else:
+    st.info("Need at least 2 years of data for year-over-year comparison.")
+
+st.divider()
+
 # US State Map (placeholder - state data coming in Phase 2)
 st.subheader("🗺️ Medicare Spending by State")
 st.info("🚧 State-level geographic data pipeline in progress — coming in next update.")
