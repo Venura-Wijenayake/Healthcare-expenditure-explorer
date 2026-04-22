@@ -177,6 +177,52 @@ st.plotly_chart(fig4, use_container_width=True, height=400)
 
 st.divider()
 
+# Drug Comparison Tool
+st.subheader("🔍 Drug Comparison Tool")
+st.markdown("Select up to 5 drugs to compare side by side.")
+
+all_drugs = sorted(filtered["Brnd_Name"].dropna().unique().tolist())
+selected_drugs = st.multiselect(
+    "Select drugs to compare",
+    options=all_drugs,
+    default=["Ozempic", "Mounjaro", "Eliquis"] if all(d in all_drugs for d in ["Ozempic", "Mounjaro", "Eliquis"]) else all_drugs[:3],
+    max_selections=5
+)
+
+if selected_drugs:
+    comparison_df = (
+        filtered[filtered["Brnd_Name"].isin(selected_drugs)]
+        .drop_duplicates(subset=["Brnd_Name"])
+        [["Brnd_Name", "Gnrc_Name", "Tot_Spndng", "Tot_Benes", "Avg_Spnd_Per_Bene"]]
+        .copy()
+    )
+    comparison_df["Total Spending ($B)"] = (comparison_df["Tot_Spndng"] / 1e9).round(2)
+    comparison_df["Beneficiaries (M)"] = (comparison_df["Tot_Benes"] / 1e6).round(2)
+    comparison_df["Avg/Patient ($)"] = comparison_df["Avg_Spnd_Per_Bene"].round(0).apply(lambda x: f"${x:,.0f}")
+    comparison_df = comparison_df.rename(columns={"Brnd_Name": "Brand", "Gnrc_Name": "Generic"})
+
+    st.dataframe(
+        comparison_df[["Brand", "Generic", "Total Spending ($B)", "Beneficiaries (M)", "Avg/Patient ($)"]],
+        use_container_width=True,
+        hide_index=True
+    )
+
+    fig5 = px.bar(
+        comparison_df,
+        x="Brand",
+        y="Total Spending ($B)",
+        color="Brand",
+        text="Total Spending ($B)",
+        color_discrete_sequence=px.colors.qualitative.Set1
+    )
+    fig5.update_traces(texttemplate="%{text}B", textposition="outside")
+    fig5.update_layout(showlegend=False)
+    st.plotly_chart(fig5, use_container_width=True)
+else:
+    st.info("Select at least one drug above to compare.")
+
+st.divider()
+
 # US State Map (placeholder - state data coming in Phase 2)
 st.subheader("🗺️ Medicare Spending by State")
 st.info("🚧 State-level geographic data pipeline in progress — coming in next update.")
