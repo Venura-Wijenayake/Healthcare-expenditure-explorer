@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from data_loader import fetch_part_d_data
+from data_loader import fetch_part_d_data, fetch_part_b_data
 
 st.set_page_config(
     page_title="U.S. Healthcare Expenditure Explorer",
@@ -299,6 +299,137 @@ if mftr_col:
     st.plotly_chart(fig7, use_container_width=True)
 else:
     st.info("Manufacturer data not available in current dataset.")
+
+st.divider()
+
+# Anomaly Detection
+st.subheader("🚨 Spending Anomalies")
+st.markdown("Drugs with unusually high spending relative to the number of beneficiaries they serve.")
+
+df["Avg_Spnd_Per_Bene"] = pd.to_numeric(df["Avg_Spnd_Per_Bene"], errors="coerce")
+df["Tot_Spndng"] = pd.to_numeric(df["Tot_Spndng"], errors="coerce")
+
+anomaly_df = filtered[
+    (filtered["Tot_Benes"] >= 100) &
+    (filtered["Tot_Spndng"] >= 1e7)
+].copy()
+
+anomaly_df = anomaly_df.drop_duplicates(subset=["Brnd_Name"])
+
+mean_spend = anomaly_df["Avg_Spnd_Per_Bene"].mean()
+std_spend = anomaly_df["Avg_Spnd_Per_Bene"].std()
+threshold = mean_spend + (2 * std_spend)
+
+anomalies = anomaly_df[anomaly_df["Avg_Spnd_Per_Bene"] > threshold].copy()
+anomalies = anomalies.sort_values("Avg_Spnd_Per_Bene", ascending=False).head(10)
+
+if not anomalies.empty:
+    st.warning(f"⚠️ Found **{len(anomalies)}** drugs with spending more than 2 standard deviations above average (threshold: **${threshold:,.0f}**/patient)")
+
+    anomalies["Avg_Spnd_Per_Bene"] = anomalies["Avg_Spnd_Per_Bene"].round(0)
+    anomalies["Tot_Spndng_B"] = (anomalies["Tot_Spndng"] / 1e9).round(2)
+
+    fig8 = px.scatter(
+        anomalies,
+        x="Tot_Benes",
+        y="Avg_Spnd_Per_Bene",
+        size="Tot_Spndng_B",
+        color="Brnd_Name",
+        hover_name="Brnd_Name",
+        labels={
+            "Tot_Benes": "Number of Beneficiaries",
+            "Avg_Spnd_Per_Bene": "Avg Spend Per Patient ($)",
+            "Tot_Spndng_B": "Total Spending ($B)"
+        },
+        color_discrete_sequence=px.colors.qualitative.Set1
+    )
+    fig8.add_hline(
+        y=threshold,
+        line_dash="dash",
+        line_color="red",
+        annotation_text=f"Anomaly threshold: ${threshold:,.0f}",
+        annotation_position="top right"
+    )
+    st.plotly_chart(fig8, use_container_width=True)
+
+    display_anomalies = anomalies[["Brnd_Name", "Gnrc_Name", "Tot_Spndng_B", "Tot_Benes", "Avg_Spnd_Per_Bene"]].copy()
+    display_anomalies.columns = ["Brand", "Generic", "Total Spending ($B)", "Beneficiaries", "Avg/Patient ($)"]
+    display_anomalies["Avg/Patient ($)"] = display_anomalies["Avg/Patient ($)"].apply(lambda x: f"${x:,.0f}")
+    st.dataframe(display_anomalies, use_container_width=True, hide_index=True)
+else:
+    st.success("No significant spending anomalies detected in the current selection.")
+
+st.divider()
+
+# Part B Section
+st.subheader("💉 Medicare Part B — Doctor-Administered Drugs")
+st.markdown("Part B covers drugs administered in doctors offices and outpatient settings — different from Part D pharmacy drugs.")
+
+with st.spinner("Loading Part B data..."):
+    df_b = fetch_part_b_data()
+
+# Clean and reshape Part B - it has yearly columns not rows
+spend_cols = [c for c in df_b.columns if c.startswith("Tot_Spndng_")]
+bene_cols = [c for c in df_b.columns if c.startswith("Tot_Benes_")]
+
+# Get most recent year available (2023)
+df_b["Tot_Spndng"] = pd.to_numeric(df_b["Tot_Spndng_2023"], errors="coerce")
+df_b["Tot_Benes"] = pd.to_numeric(df_b["Tot_Benes_2023"], errors="coerce")
+df_b = df_b.dropna(subset=["Tot_Spndng"])
+
+# Metrics
+col_b1, col_b2, col_b3 = st.columns(3)
+col_b1.metric("Part B Drugs", f"{df_b['Brnd_Name'].nunique():,}")
+col_b2.metric("Total Part B Spending (2023)", f"${df_b['Tot_Spndng'].sum()/1e9:.1f}B")
+col_b3.metric("Total Beneficiaries", f"{df_b['Tot_Benes'].sum()/1e6:.1f}M")
+
+# Top 10 Part B drugs
+top_b = df_b.groupby("Brnd_Name")["Tot_Spndng"].sum().nlargest(10).reset_index()
+top_b["Spending_B"] = (top_b["Tot_Spndng"] / 1e9).round(2)
+
+fig_b = px.bar(
+    top_b,
+    x="Spending_B",
+    y="Brnd_Name",
+    orientation="h",
+    text="Spending_B",
+    color="Spending_B",
+    color_continuous_scale="Oranges",
+    labels={"Spending_B": "Total Spending ($B)", "Brnd_Name": "Drug"}
+)
+fig_b.update_traces(texttemplate="%{text}B", textposition="outside")
+fig_b.update_layout(yaxis={"categoryorder": "total ascending"})
+st.plotly_chart(fig_b, use_container_width=True)
+
+# Part B vs Part D comparison - drugs in both
+st.subheader("🔗 Drugs Appearing in Both Part B and Part D")
+st.markdown("These drugs are prescribed at pharmacies AND administered in clinical settings.")
+
+part_d_drugs = set(df["Brnd_Name"].dropna().unique())
+part_b_drugs = set(df_b["Brnd_Name"].dropna().unique())
+overlap = part_d_drugs.intersection(part_b_drugs)
+
+if overlap:
+    overlap_d = df[df["Brnd_Name"].isin(overlap)].groupby("Brnd_Name")["Tot_Spndng"].sum().reset_index()
+    overlap_b = df_b[df_b["Brnd_Name"].isin(overlap)].groupby("Brnd_Name")["Tot_Spndng"].sum().reset_index()
+    overlap_merged = overlap_d.merge(overlap_b, on="Brnd_Name", suffixes=("_PartD", "_PartB"))
+    overlap_merged["Total_Combined"] = overlap_merged["Tot_Spndng_PartD"] + overlap_merged["Tot_Spndng_PartB"]
+    overlap_merged = overlap_merged.nlargest(10, "Total_Combined")
+    overlap_merged["Part D ($B)"] = (overlap_merged["Tot_Spndng_PartD"] / 1e9).round(2)
+    overlap_merged["Part B ($B)"] = (overlap_merged["Tot_Spndng_PartB"] / 1e9).round(2)
+
+    fig_overlap = px.bar(
+        overlap_merged,
+        x="Brnd_Name",
+        y=["Part D ($B)", "Part B ($B)"],
+        barmode="group",
+        labels={"Brnd_Name": "Drug", "value": "Spending ($B)"},
+        color_discrete_map={"Part D ($B)": "#2196F3", "Part B ($B)": "#FF9800"}
+    )
+    st.plotly_chart(fig_overlap, use_container_width=True)
+    st.caption(f"Found {len(overlap):,} drugs appearing in both Part B and Part D datasets.")
+else:
+    st.info("No overlapping drugs found between Part B and Part D.")
 
 st.divider()
 

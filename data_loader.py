@@ -31,8 +31,33 @@ def fetch_part_d_data():
     print(f"Loaded {len(df)} records")
     return df
 
+# CMS Medicare Part B Spending by Drug - drugs administered in doctors offices/outpatient settings
+PART_B_CSV_URL = "https://data.cms.gov/sites/default/files/2025-05/f52d5fcd-8d93-481d-9173-6219813e4efb/DSD_PTB_RY25_P06_V10_DYT23_HCPCS-%20250430.csv"
+
+def fetch_part_b_data():
+    """Load Medicare Part B drug spending data (administered in doctors offices)."""
+    filepath = os.path.join(DATA_DIR, "part_b.csv")
+
+    if os.path.exists(filepath):
+        print("Loading cached Part B data...")
+        return pd.read_csv(filepath)
+
+    print("Downloading Part B data from CMS...")
+    response = requests.get(PART_B_CSV_URL, timeout=30)
+
+    if response.status_code != 200:
+        raise Exception(f"Failed to fetch Part B data: {response.status_code}")
+
+    with open(filepath, "wb") as f:
+        f.write(response.content)
+
+    df = pd.read_csv(filepath)
+    print(f"Loaded {len(df)} Part B records")
+    return df
+
 
 if __name__ == "__main__":
-    df = fetch_part_d_data()
-    print(df.head())
-    print(df.columns.tolist())
+    df_d = fetch_part_d_data()
+    print("Part D columns:", df_d.columns.tolist())
+    df_b = fetch_part_b_data()
+    print("Part B columns:", df_b.columns.tolist())
