@@ -78,6 +78,58 @@ def load_geo_variation():
     return df
 
 
+# HRSA Area Health Resources File (state + national, 2024-2025) - workforce supply by profession
+AHRF_ZIP_URL = "https://data.hrsa.gov/DataDownload/AHRF/AHRF_SN_2024-2025_CSV.zip"
+AHRF_ZIP_MEMBER = "NCHWA-2024-2025+AHRF+SN+CSV/ahrfsn2025.csv"
+
+def load_ahrf():
+    """Load HRSA AHRF state+national workforce file (52 rows = 50 states + DC + US, 1448 vars)."""
+    filepath = os.path.join(DATA_DIR, "ahrf_state_national_2025.csv")
+
+    if not os.path.exists(filepath):
+        print("Downloading AHRF data from HRSA...")
+        response = requests.get(AHRF_ZIP_URL, timeout=120)
+        if response.status_code != 200:
+            raise Exception(f"Failed to fetch AHRF data: {response.status_code}")
+        with zipfile.ZipFile(io.BytesIO(response.content)) as z:
+            with z.open(AHRF_ZIP_MEMBER) as src, open(filepath, "wb") as dst:
+                dst.write(src.read())
+    else:
+        print("Loading cached AHRF data...")
+
+    df = pd.read_csv(filepath, low_memory=False)
+    print(f"Loaded {len(df)} AHRF state rows, {len(df.columns)} columns")
+    return df
+
+
+# HRSA HPSA (Health Professional Shortage Areas) - 3 disciplines, designation-level
+HPSA_FILES = {
+    "Primary Care":  ("hpsa_primary_care.csv",  "https://data.hrsa.gov/DataDownload/DD_Files/BCD_HPSA_FCT_DET_PC.csv"),
+    "Dental":        ("hpsa_dental.csv",        "https://data.hrsa.gov/DataDownload/DD_Files/BCD_HPSA_FCT_DET_DH.csv"),
+    "Mental Health": ("hpsa_mental_health.csv", "https://data.hrsa.gov/DataDownload/DD_Files/BCD_HPSA_FCT_DET_MH.csv"),
+}
+
+def load_hpsa():
+    """Load HRSA HPSA designations across all 3 disciplines, filtered to currently Designated."""
+    frames = []
+    for discipline, (fname, url) in HPSA_FILES.items():
+        filepath = os.path.join(DATA_DIR, fname)
+        if not os.path.exists(filepath):
+            print(f"Downloading HPSA {discipline} from HRSA...")
+            response = requests.get(url, timeout=300)
+            if response.status_code != 200:
+                raise Exception(f"Failed to fetch HPSA {discipline}: {response.status_code}")
+            with open(filepath, "wb") as f:
+                f.write(response.content)
+        df = pd.read_csv(filepath, low_memory=False)
+        df = df[df["HPSA Status"] == "Designated"].copy()
+        df["Discipline"] = discipline
+        frames.append(df)
+    combined = pd.concat(frames, ignore_index=True)
+    print(f"Loaded {len(combined)} designated HPSAs across {len(HPSA_FILES)} disciplines")
+    return combined
+
+
 if __name__ == "__main__":
     df_d = fetch_part_d_data()
     print("Part D columns:", df_d.columns.tolist())
@@ -85,3 +137,7 @@ if __name__ == "__main__":
     print("Part B columns:", df_b.columns.tolist())
     df_g = load_geo_variation()
     print("Geo Variation shape:", df_g.shape)
+    df_a = load_ahrf()
+    print("AHRF shape:", df_a.shape)
+    df_h = load_hpsa()
+    print("HPSA shape:", df_h.shape)

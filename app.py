@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from data_loader import fetch_part_d_data, fetch_part_b_data, load_geo_variation
+from data_loader import fetch_part_d_data, fetch_part_b_data, load_geo_variation, load_ahrf, load_hpsa
 
 st.set_page_config(
     page_title="U.S. Healthcare Expenditure Explorer",
@@ -530,3 +530,85 @@ with tab5:
     st.plotly_chart(fig_bar_states, use_container_width=True)
 
     st.caption("Source: CMS Medicare Geographic Variation PUF. Total = TOT_MDCR_PYMT_AMT; Per Beneficiary = TOT_MDCR_PYMT_PC (FFS beneficiaries, all ages).")
+
+    st.divider()
+
+    # === Workforce Supply (HRSA AHRF) ===
+    st.subheader("👩‍⚕️ Healthcare Workforce Supply per 100k Population")
+    st.markdown("Active physicians, registered nurses, and dentists per 100k residents. Top 15 states by population.")
+
+    with st.spinner("Loading HRSA AHRF data..."):
+        df_ahrf = load_ahrf()
+
+    states_only = df_ahrf[df_ahrf["st_abbrev"] != "US"].copy()
+    for c in ["phys_wkforc_23", "rn_23", "dent_23", "popn_pums_23"]:
+        states_only[c] = pd.to_numeric(states_only[c], errors="coerce")
+    states_only["Physicians"] = states_only["phys_wkforc_23"] / states_only["popn_pums_23"] * 1e5
+    states_only["Registered Nurses"] = states_only["rn_23"] / states_only["popn_pums_23"] * 1e5
+    states_only["Dentists"] = states_only["dent_23"] / states_only["popn_pums_23"] * 1e5
+
+    top15_pop = states_only.nlargest(15, "popn_pums_23")[
+        ["st_abbrev", "Physicians", "Registered Nurses", "Dentists"]
+    ].copy()
+    workforce_long = top15_pop.melt(
+        id_vars="st_abbrev",
+        value_vars=["Physicians", "Registered Nurses", "Dentists"],
+        var_name="Profession",
+        value_name="Per 100k",
+    )
+    workforce_long["Per 100k"] = workforce_long["Per 100k"].round(1)
+
+    fig_workforce = px.bar(
+        workforce_long,
+        x="st_abbrev",
+        y="Per 100k",
+        color="Profession",
+        barmode="group",
+        labels={"st_abbrev": "State", "Per 100k": "Workforce per 100k"},
+        color_discrete_sequence=["#1f77b4", "#2ca02c", "#ff7f0e"],
+    )
+    fig_workforce.update_layout(xaxis={"categoryorder": "array", "categoryarray": top15_pop["st_abbrev"].tolist()})
+    st.plotly_chart(fig_workforce, use_container_width=True)
+    st.caption("Source: HRSA Area Health Resources File (AHRF) state+national 2024-2025. Workforce: phys_wkforc_23 (active physicians), rn_23, dent_23. Population: popn_pums_23 (ACS PUMS). States ranked by population.")
+
+    st.divider()
+
+    # === Provider Shortage (HRSA HPSA) ===
+    st.subheader("🚨 Provider Shortage — Practitioners Needed by State")
+    st.markdown("FTE practitioners needed across designated Health Professional Shortage Areas (HPSAs), by discipline. Top 15 states by total need.")
+
+    with st.spinner("Loading HRSA HPSA data..."):
+        df_hpsa = load_hpsa()
+
+    df_hpsa["HPSA Shortage"] = pd.to_numeric(df_hpsa["HPSA Shortage"], errors="coerce")
+    rollup = (
+        df_hpsa.groupby(["State Abbreviation", "Discipline"])["HPSA Shortage"]
+        .sum()
+        .unstack(fill_value=0)
+    )
+    rollup["Total"] = rollup.sum(axis=1)
+    top15_shortage = rollup.nlargest(15, "Total").drop(columns="Total").reset_index()
+
+    shortage_long = top15_shortage.melt(
+        id_vars="State Abbreviation",
+        var_name="Discipline",
+        value_name="Practitioners Needed",
+    )
+    shortage_long["Practitioners Needed"] = shortage_long["Practitioners Needed"].round(0)
+
+    fig_shortage = px.bar(
+        shortage_long,
+        x="State Abbreviation",
+        y="Practitioners Needed",
+        color="Discipline",
+        barmode="group",
+        labels={"State Abbreviation": "State"},
+        color_discrete_map={
+            "Primary Care": "#d62728",
+            "Dental": "#9467bd",
+            "Mental Health": "#8c564b",
+        },
+    )
+    fig_shortage.update_layout(xaxis={"categoryorder": "array", "categoryarray": top15_shortage["State Abbreviation"].tolist()})
+    st.plotly_chart(fig_shortage, use_container_width=True)
+    st.caption("Source: HRSA HPSA designations (BCD_HPSA_FCT_DET), filtered to HPSA Status = 'Designated'. 'Practitioners Needed' = sum of HPSA Shortage (FTEs to reach target ratio). NY is an outlier (~96k total) due to many population-type designations in NYC.")

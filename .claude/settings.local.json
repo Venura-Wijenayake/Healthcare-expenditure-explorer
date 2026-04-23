@@ -14,7 +14,14 @@
       "Bash(streamlit run *)",
       "Bash(curl -sf -o /dev/null -X POST http://localhost:8765/_stcore/stream -H 'content-type: application/json' --data '{}')",
       "Bash(curl -sf http://localhost:8765/)",
-      "Bash(curl -sf -o /dev/null http://localhost:8765/_stcore/health)"
+      "Bash(curl -sf -o /dev/null http://localhost:8765/_stcore/health)",
+      "WebFetch(domain:data.hrsa.gov)",
+      "WebFetch(domain:resdac.org)",
+      "Bash(curl *)",
+      "Bash(unzip -l data/ahrf_sn_2024-2025.zip)",
+      "Bash(unzip -p data/ahrf_sn_2024-2025.zip 'NCHWA-2024-2025+AHRF+SN+CSV/ahrfsn2025.csv')",
+      "Bash(unzip -l data/ahrf_sn_2024-2025_tech.zip)",
+      "Bash(unzip -o -d data/ahrf_tech_docs data/ahrf_sn_2024-2025_tech.zip)"
     ]
   }
 }
