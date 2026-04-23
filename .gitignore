@@ -1,5 +1,6 @@
 venv/
-data/
+data/*
+!data/MANIFEST.md
 __pycache__/
 *.pyc
 .env

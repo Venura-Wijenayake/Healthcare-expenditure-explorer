@@ -21,7 +21,29 @@
       "Bash(unzip -l data/ahrf_sn_2024-2025.zip)",
       "Bash(unzip -p data/ahrf_sn_2024-2025.zip 'NCHWA-2024-2025+AHRF+SN+CSV/ahrfsn2025.csv')",
       "Bash(unzip -l data/ahrf_sn_2024-2025_tech.zip)",
-      "Bash(unzip -o -d data/ahrf_tech_docs data/ahrf_sn_2024-2025_tech.zip)"
+      "Bash(unzip -o -d data/ahrf_tech_docs data/ahrf_sn_2024-2025_tech.zip)",
+      "WebFetch(domain:data.cdc.gov)",
+      "WebFetch(domain:api.census.gov)",
+      "Bash(PYTHONIOENCODING=utf-8 python)",
+      "WebFetch(domain:www.samhsa.gov)",
+      "WebFetch(domain:www.cdc.gov)",
+      "Bash(unzip -l data/uscs_1999_2022.zip)",
+      "Bash(ls -la /tmp_test_h80.bin)",
+      "Bash(file /tmp_test_h80.bin)",
+      "Bash(head -c 200 /tmp_test_h80.bin)",
+      "Bash(rm -f /tmp_test_h80.bin)",
+      "Bash(pip install *)",
+      "Bash(unzip -l bls_state.zip)",
+      "WebFetch(domain:gaftp.epa.gov)",
+      "WebFetch(domain:www.ers.usda.gov)",
+      "WebFetch(domain:www.huduser.gov)",
+      "WebFetch(domain:dataverse.harvard.edu)",
+      "WebFetch(domain:www.epa.gov)",
+      "WebFetch(domain:screening-tools.com)",
+      "Bash(unzip -l data/usda_food_access.zip)",
+      "Bash(sort -k2)",
+      "Bash(git check-ignore *)",
+      "Bash(git add *)"
     ]
   }
 }
