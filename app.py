@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from data_loader import fetch_part_d_data, fetch_part_b_data
+from data_loader import fetch_part_d_data, fetch_part_b_data, load_geo_variation
 
 st.set_page_config(
     page_title="U.S. Healthcare Expenditure Explorer",
@@ -439,6 +439,94 @@ with tab4:
         st.info("No overlapping drugs found between Part B and Part D.")
 
 with tab5:
-    # US State Map (placeholder - state data coming in Phase 2)
     st.subheader("🗺️ Medicare Spending by State")
-    st.info("🚧 State-level geographic data pipeline in progress — coming in next update.")
+    st.markdown("Medicare Fee-for-Service spending by state, from the CMS Geographic Variation Public Use File.")
+
+    with st.spinner("Loading Geographic Variation data..."):
+        df_geo = load_geo_variation()
+
+    col_yr, col_view = st.columns([1, 2])
+    geo_years = sorted(df_geo["YEAR"].unique().tolist())
+    default_idx = geo_years.index(2022) if 2022 in geo_years else len(geo_years) - 1
+    geo_year = col_yr.selectbox("Year", geo_years, index=default_idx, key="geo_year")
+    view_mode = col_view.radio(
+        "View",
+        ["Total Spending", "Per Beneficiary"],
+        horizontal=True,
+        key="geo_view",
+    )
+
+    # 50 states + DC (drop PR, VI, Territory, ZZ aggregates that don't render in USA-states)
+    NON_STATES = {"PR", "VI", "Territory", "ZZ"}
+    state_df = df_geo[
+        (df_geo["BENE_GEO_LVL"] == "State")
+        & (df_geo["YEAR"] == geo_year)
+        & (df_geo["BENE_AGE_LVL"] == "All")
+        & (~df_geo["BENE_GEO_DESC"].isin(NON_STATES))
+    ].copy()
+
+    state_df["TOT_MDCR_PYMT_AMT"] = pd.to_numeric(state_df["TOT_MDCR_PYMT_AMT"], errors="coerce")
+    state_df["TOT_MDCR_PYMT_PC"] = pd.to_numeric(state_df["TOT_MDCR_PYMT_PC"], errors="coerce")
+    state_df["Spending_B"] = (state_df["TOT_MDCR_PYMT_AMT"] / 1e9).round(2)
+
+    if view_mode == "Total Spending":
+        metric_col = "Spending_B"
+        metric_label = "Spending ($B)"
+        color_scale = "Blues"
+        hover_fmt = ":.2f"
+        bar_text_template = "$%{text}B"
+    else:
+        metric_col = "TOT_MDCR_PYMT_PC"
+        metric_label = "Spending per Beneficiary ($)"
+        color_scale = "Reds"
+        hover_fmt = ":$,.0f"
+        bar_text_template = "$%{text:,.0f}"
+
+    fig_map = px.choropleth(
+        state_df,
+        locations="BENE_GEO_DESC",
+        locationmode="USA-states",
+        color=metric_col,
+        scope="usa",
+        color_continuous_scale=color_scale,
+        labels={metric_col: metric_label, "BENE_GEO_DESC": "State"},
+        hover_name="BENE_GEO_DESC",
+        hover_data={metric_col: hover_fmt, "BENE_GEO_DESC": False},
+    )
+    fig_map.update_layout(margin={"l": 0, "r": 0, "t": 0, "b": 0})
+    st.plotly_chart(fig_map, use_container_width=True)
+
+    col_g1, col_g2, col_g3 = st.columns(3)
+    if view_mode == "Total Spending":
+        col_g1.metric("Total FFS Spending", f"${state_df['TOT_MDCR_PYMT_AMT'].sum()/1e9:.1f}B")
+        top_state = state_df.loc[state_df["TOT_MDCR_PYMT_AMT"].idxmax()]
+        bottom_state = state_df.loc[state_df["TOT_MDCR_PYMT_AMT"].idxmin()]
+        col_g2.metric("Highest Spend State", top_state["BENE_GEO_DESC"], f"${top_state['Spending_B']:.1f}B")
+        col_g3.metric("Lowest Spend State", bottom_state["BENE_GEO_DESC"], f"${bottom_state['Spending_B']:.2f}B")
+    else:
+        col_g1.metric("National Avg / Beneficiary", f"${state_df['TOT_MDCR_PYMT_PC'].mean():,.0f}")
+        top_state = state_df.loc[state_df["TOT_MDCR_PYMT_PC"].idxmax()]
+        bottom_state = state_df.loc[state_df["TOT_MDCR_PYMT_PC"].idxmin()]
+        col_g2.metric("Highest per Beneficiary", top_state["BENE_GEO_DESC"], f"${top_state['TOT_MDCR_PYMT_PC']:,.0f}")
+        col_g3.metric("Lowest per Beneficiary", bottom_state["BENE_GEO_DESC"], f"${bottom_state['TOT_MDCR_PYMT_PC']:,.0f}")
+
+    st.divider()
+
+    st.subheader(f"Top 10 States — {view_mode} ({geo_year})")
+    top10_states = state_df.nlargest(10, metric_col)[["BENE_GEO_DESC", metric_col]].copy()
+    top10_states[metric_col] = top10_states[metric_col].round(2)
+    fig_bar_states = px.bar(
+        top10_states,
+        x=metric_col,
+        y="BENE_GEO_DESC",
+        orientation="h",
+        labels={metric_col: metric_label, "BENE_GEO_DESC": "State"},
+        color=metric_col,
+        color_continuous_scale=color_scale,
+        text=metric_col,
+    )
+    fig_bar_states.update_traces(texttemplate=bar_text_template, textposition="outside")
+    fig_bar_states.update_layout(yaxis={"categoryorder": "total ascending"}, showlegend=False)
+    st.plotly_chart(fig_bar_states, use_container_width=True)
+
+    st.caption("Source: CMS Medicare Geographic Variation PUF. Total = TOT_MDCR_PYMT_AMT; Per Beneficiary = TOT_MDCR_PYMT_PC (FFS beneficiaries, all ages).")

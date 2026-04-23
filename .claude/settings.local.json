@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:data.cms.gov)",
+      "WebFetch(domain:catalog.data.gov)",
+      "WebFetch(domain:healthdata.gov)",
+      "Bash(curl -sL --max-time 60 'https://data.cms.gov/data.json' -o /tmp/cms_catalog.json)",
+      "Read(//tmp/**)",
+      "Bash(python *)",
+      "Bash(curl -sL --max-time 60 'https://data.cms.gov/data.json' -o cms_catalog.json)",
+      "Bash(curl -sIL --max-time 30 'https://data.cms.gov/sites/default/files/2025-03/a40ac71d-9f80-4d99-92d2-fd149433d7d8/2014-2023%20Medicare%20Fee-for-Service%20Geographic%20Variation%20Public%20Use%20File.csv')",
+      "Bash(curl -sL --max-time 600 'https://data.cms.gov/sites/default/files/2025-03/a40ac71d-9f80-4d99-92d2-fd149433d7d8/2014-2023%20Medicare%20Fee-for-Service%20Geographic%20Variation%20Public%20Use%20File.csv' -o 'data/geo_variation_2022.csv')",
+      "Bash(streamlit run *)",
+      "Bash(curl -sf -o /dev/null -X POST http://localhost:8765/_stcore/stream -H 'content-type: application/json' --data '{}')",
+      "Bash(curl -sf http://localhost:8765/)",
+      "Bash(curl -sf -o /dev/null http://localhost:8765/_stcore/health)"
+    ]
+  }
+}

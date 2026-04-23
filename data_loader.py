@@ -56,8 +56,32 @@ def fetch_part_b_data():
     return df
 
 
+# CMS Medicare Geographic Variation by National, State & County
+GEO_VARIATION_CSV_URL = "https://data.cms.gov/sites/default/files/2025-03/a40ac71d-9f80-4d99-92d2-fd149433d7d8/2014-2023%20Medicare%20Fee-for-Service%20Geographic%20Variation%20Public%20Use%20File.csv"
+
+def load_geo_variation():
+    """Load Medicare FFS geographic variation data (national/state/county, 2014-2023)."""
+    filepath = os.path.join(DATA_DIR, "geo_variation_2014_2023.csv")
+
+    if not os.path.exists(filepath):
+        print("Downloading Geographic Variation data from CMS...")
+        response = requests.get(GEO_VARIATION_CSV_URL, timeout=120)
+        if response.status_code != 200:
+            raise Exception(f"Failed to fetch Geographic Variation data: {response.status_code}")
+        with open(filepath, "wb") as f:
+            f.write(response.content)
+    else:
+        print("Loading cached Geographic Variation data...")
+
+    df = pd.read_csv(filepath, low_memory=False)
+    print(f"Loaded {len(df)} Geographic Variation records ({df['YEAR'].min()}-{df['YEAR'].max()})")
+    return df
+
+
 if __name__ == "__main__":
     df_d = fetch_part_d_data()
     print("Part D columns:", df_d.columns.tolist())
     df_b = fetch_part_b_data()
     print("Part B columns:", df_b.columns.tolist())
+    df_g = load_geo_variation()
+    print("Geo Variation shape:", df_g.shape)
