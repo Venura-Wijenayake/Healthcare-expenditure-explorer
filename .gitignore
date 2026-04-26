@@ -1,6 +1,7 @@
 venv/
 data/*
 !data/MANIFEST.md
+!data/state_risk_index.csv
 __pycache__/
 *.pyc
 .env
