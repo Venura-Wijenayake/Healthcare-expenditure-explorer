@@ -542,13 +542,9 @@ with st.sidebar:
         key="global_state",
     )
     state_filter = None if selected_state == "— None —" else selected_state
-
-    years = sorted(df["Year"].unique().tolist())
-    selected_year = st.selectbox(
-        "Year",
-        years,
-        index=len(years) - 1,
-        key="global_year",
+    st.caption(
+        "📅 Data shown at latest available year per dataset · "
+        "Full year filtering coming with Supabase integration"
     )
 
     st.markdown('<div class="hei-sb-section">STATE PROFILE</div>', unsafe_allow_html=True)
@@ -648,6 +644,10 @@ with st.sidebar:
 # ======================================================================
 # STEP 4/5/9 — Tab declaration + Explore renderer infrastructure
 # ======================================================================
+# Year dropdown was removed from the sidebar — default to the latest Part D
+# year so the Enhanced View (top 10, GLP-1, comparison tool) still has a
+# sensible time slice. Each summarizer otherwise loads its own latest year.
+selected_year = max(df["Year"].unique())
 filtered = df[df["Year"] == selected_year]
 
 LOWER_IS_BETTER = {
@@ -804,8 +804,13 @@ def render_chart_for_dataset(key: str, df_in: pd.DataFrame, primary_col: str,
 
 
 def render_dataset_view(dataset_key: str, state_filter: str | None,
-                        year_filter) -> None:
-    """Dynamic view of any dataset registered in SUMMARIZERS."""
+                        year_filter=None) -> None:
+    """Dynamic view of any dataset registered in SUMMARIZERS.
+
+    Note: year_filter is currently a no-op — each summarizer loads its own
+    latest year. The parameter is preserved for forward-compatibility once
+    Supabase-backed datasets support arbitrary year filtering.
+    """
     fn = SUMMARIZERS.get(dataset_key)
     if fn is None:
         st.info(
@@ -1601,7 +1606,7 @@ with tab3:
             if active_key in SUMMARIZERS:
                 st.markdown("---")
                 st.markdown("**📊 State-level overview**")
-                render_dataset_view(active_key, state_filter, selected_year)
+                render_dataset_view(active_key, state_filter)
             elif active_key not in {"cms_partd", "cms_partb"}:
                 st.info(f"No generic summarizer registered for `{active_key}`.")
 
