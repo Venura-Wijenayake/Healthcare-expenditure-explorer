@@ -8,6 +8,7 @@ from ai_analyst import (
     query_analyst,
     get_active_provider,
     PROVIDER_LABELS,
+    DATASET_DISPLAY,
 )
 
 st.set_page_config(
@@ -941,7 +942,7 @@ with tab7:
         with st.spinner("Thinking…"):
             t0 = time.time()
             try:
-                response, provider_used, ctx_chars, route_label = query_analyst(question.strip())
+                response, provider_used, ctx_chars, route_label, datasets_used = query_analyst(question.strip())
                 elapsed = time.time() - t0
                 st.session_state.ai_history.insert(0, {
                     "q": question.strip(),
@@ -950,6 +951,7 @@ with tab7:
                     "seconds": elapsed,
                     "ctx_chars": ctx_chars,
                     "route": route_label,
+                    "datasets_used": datasets_used,
                 })
                 st.session_state.ai_history = st.session_state.ai_history[:5]
             except RuntimeError as e:
@@ -958,13 +960,27 @@ with tab7:
     if st.session_state.ai_history:
         latest = st.session_state.ai_history[0]
         st.markdown("### Response")
-        st.info(f"📊 **Routing:** {latest.get('route', 'n/a')}")
         with st.container(border=True):
             st.markdown(latest["a"])
         st.caption(
             f"Answered by **{PROVIDER_LABELS.get(latest['provider'], latest['provider'])}** "
             f"in {latest['seconds']:.1f}s · context {latest.get('ctx_chars', 0):,} chars."
         )
+
+        latest_datasets = latest.get("datasets_used", [])
+        if latest_datasets:
+            with st.expander(
+                f"📊 Data sources used ({len(latest_datasets)} datasets)",
+                expanded=False,
+            ):
+                rows = []
+                for key in latest_datasets:
+                    info = DATASET_DISPLAY.get(key)
+                    if info:
+                        rows.append({"Dataset": info[0], "Agency": info[1], "Coverage": info[2]})
+                    else:
+                        rows.append({"Dataset": key, "Agency": "—", "Coverage": "—"})
+                st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
         if len(st.session_state.ai_history) > 1:
             st.divider()
@@ -978,6 +994,20 @@ with tab7:
                         f"{item.get('ctx_chars', 0):,} chars · "
                         f"{item.get('route', '').split(' · ')[0] if item.get('route') else ''}"
                     )
+                    item_datasets = item.get("datasets_used", [])
+                    if item_datasets:
+                        with st.expander(
+                            f"📊 Data sources used ({len(item_datasets)} datasets)",
+                            expanded=False,
+                        ):
+                            rows = []
+                            for key in item_datasets:
+                                info = DATASET_DISPLAY.get(key)
+                                if info:
+                                    rows.append({"Dataset": info[0], "Agency": info[1], "Coverage": info[2]})
+                                else:
+                                    rows.append({"Dataset": key, "Agency": "—", "Coverage": "—"})
+                            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
 with tab8:
     st.subheader("📚 Data Sources")

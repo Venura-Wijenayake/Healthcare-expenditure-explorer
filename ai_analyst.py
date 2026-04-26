@@ -206,6 +206,87 @@ BASE_DATASETS = ["state_risk_index", "geo_variation_2014_2023"]
 
 
 # =============================================================================
+# Public-facing display metadata for the "Data sources used" expander
+# (human_name, agency, coverage). Keys map to the dataset identifiers used
+# by SUMMARIZERS / DATASET_REGISTRY / retrieve_context.
+# =============================================================================
+DATASET_DISPLAY: dict[str, tuple[str, str, str]] = {
+    "state_risk_index": ("State Risk Index", "Computed", "All 50 states + DC"),
+    "geo_variation_2014_2023": ("Medicare FFS Geographic Variation", "CMS", "2014–2023"),
+    "cms_partd": ("Medicare Part D Drug Spending", "CMS", "2019–2023"),
+    "cms_partb": ("Medicare Part B Drug Spending", "CMS", "2019–2023"),
+    "cms_inpatient_geo": ("Medicare Inpatient Geographic Variation", "CMS", "2019–2023"),
+    "cms_physician_payments": ("Medicare Physician & Other Practitioners", "CMS", "2021–2023"),
+    "cms_medicaid_drug": ("Medicaid Drug Spending", "CMS", "2019–2024"),
+    "cms_nursing_home": ("Nursing Home Compare", "CMS", "Current"),
+    "cms_hospice": ("Hospice Compare", "CMS", "Current"),
+    "cms_dialysis": ("Dialysis Facility Compare", "CMS", "Current"),
+    "cms_chronic_conditions": ("Medicare Chronic Conditions", "CMS", "2021"),
+    "cms_aco": ("Accountable Care Organizations", "CMS", "2023"),
+    "cms_innovation": ("CMS Innovation Models", "CMS", "2023"),
+    "cms_open_payments": ("Open Payments (Industry to Physicians)", "CMS", "2023"),
+    "cms_timely_care": ("Timely & Effective Care — State", "CMS", "2024"),
+    "cms_snf": ("Skilled Nursing Facility QRP", "CMS", "2022–2025"),
+    "hospital_compare_general_info": ("Hospital General Information", "CMS", "Current"),
+    "hospital_compare_readmissions_state": ("Hospital Readmissions — State", "CMS", "Current"),
+    "hospital_compare_complications_state": ("Hospital Complications — State", "CMS", "Current"),
+    "hospital_compare_patient_experience": ("Patient Experience (HCAHPS)", "CMS", "Current"),
+    "ahrf_state_national_2025": ("Area Health Resources File", "HRSA", "2023–2025"),
+    "hpsa_primary_care": ("Primary Care Shortage Areas", "HRSA", "Current"),
+    "hpsa_mental_health": ("Mental Health HPSA Shortage Areas", "HRSA", "Current"),
+    "hpsa_dental": ("Dental HPSA Shortage Areas", "HRSA", "Current"),
+    "hrsa_mch": ("Maternal & Child Health Block Grant", "HRSA", "2022"),
+    "hrsa_grants": ("HRSA Grant Awards", "HRSA", "2023"),
+    "hrsa_telehealth": ("Telehealth Programs", "HRSA", "2023"),
+    "hrsa_workforce_projections": ("Health Workforce Projections", "HRSA", "2023–2037"),
+    "gme_residency": ("Graduate Medical Education Residency", "CMS/HRSA", "2023"),
+    "hrsa_nurse_corps": ("Nurse Corps LRP + Scholarship", "HRSA", "FY2024"),
+    "hrsa_ryan_white": ("Ryan White HIV/AIDS Program", "HRSA", "FY2024"),
+    "cdc_hiv": ("HIV New Diagnoses", "CDC", "2023"),
+    "cdc_sti": ("STI Surveillance (Chlamydia/Gonorrhea/Syphilis)", "CDC", "2022"),
+    "cdc_drug_overdose": ("Drug Overdose Deaths", "CDC", "2020–2025"),
+    "cdc_wastewater": ("NWSS Wastewater Surveillance", "CDC", "Current (4 weeks)"),
+    "cdc_vaccination": ("Vaccination Coverage", "CDC", "2023–2024"),
+    "cdc_births": ("Birth Data", "CDC/NCHS", "2022"),
+    "cdc_maternal_mortality": ("Maternal Mortality", "CDC/NCHS", "2018–2022"),
+    "cdc_mortality": ("Mortality Statistics", "CDC/NCHS", "2022"),
+    "cdc_wonder_mortality": ("WONDER Underlying Cause of Death", "CDC", "2018–2022"),
+    "cdc_places_county": ("PLACES County Health Measures", "CDC", "2023"),
+    "cdc_oral_health": ("Oral Health Data", "CDC", "2022"),
+    "cdc_wisqars": ("WISQARS Injury & Violence", "CDC", "2022"),
+    "cdc_lead_exposure": ("Childhood Lead Exposure", "CDC", "2021"),
+    "cdc_nhanes": ("National Health & Nutrition Examination Survey", "CDC", "2017–2020"),
+    "cdc_hai": ("Healthcare-Associated Infections (NHSN)", "CDC", "2024"),
+    "cdc_nndss": ("Notifiable Disease Surveillance (NNDSS)", "CDC", "2023–2024"),
+    "cdc_alzheimers": ("Alzheimer's Disease & Healthy Aging", "CDC", "2022"),
+    "brfss_state_prevalence": ("BRFSS Behavioral Risk Factors", "CDC", "2021–2023"),
+    "nimh_mental_health": ("Mental Health Statistics", "NIMH", "2021"),
+    "nci_cancer": ("Cancer Incidence & Mortality (SEER)", "NCI/CDC", "2022–2023"),
+    "samhsa_facilities": ("Substance Use Treatment Facilities", "SAMHSA", "Current"),
+    "samhsa_nsduh": ("National Drug Use & Health Survey", "SAMHSA", "2022"),
+    "samhsa_nmhss": ("Mental Health Services Survey (N-MHSS)", "SAMHSA", "2023"),
+    "census_sahie": ("Small Area Health Insurance Estimates", "Census", "2023"),
+    "census_saipe": ("Small Area Income & Poverty Estimates", "Census", "2022"),
+    "acs_demographics": ("American Community Survey Demographics", "Census", "2022"),
+    "bls_healthcare_wages": ("Healthcare Occupation Wages (OEWS)", "BLS", "2024"),
+    "bls_unemployment": ("State Unemployment Rates (LAUS)", "BLS", "2020–2025"),
+    "ahrq_meps": ("Medical Expenditure Panel Survey", "AHRQ", "2021"),
+    "onc_ehr_adoption": ("EHR Adoption & Health IT", "ONC", "2021"),
+    "nih_research_funding": ("NIH Research Funding by State", "NIH", "2023"),
+    "usda_food_access": ("Food Access Research Atlas", "USDA", "2019"),
+    "usda_wic": ("WIC Participation & Funding", "USDA", "2023"),
+    "hud_housing": ("Housing & Urban Development Data", "HUD", "2022"),
+    "epa_ejscreen": ("Environmental Justice Screening", "EPA", "2023"),
+    "fcc_broadband": ("Broadband Coverage by State", "FCC", "2022"),
+    "dot_transportation": ("Transportation Access", "DOT", "2022"),
+    "osha_workplace": ("Workplace Injury & Illness", "OSHA", "2022"),
+    "aoa_aging_services": ("Aging Services & Programs", "AoA/ACL", "2022"),
+    "rwj_county_health_rankings": ("County Health Rankings", "RWJF", "2024"),
+    "ca_hcai": ("California Hospital Utilization", "CA HCAI", "2012–2017"),
+}
+
+
+# =============================================================================
 # Per-dataset summarizers
 # =============================================================================
 def _section(header: str, df: pd.DataFrame, max_rows: int = 50) -> tuple[str, str]:
@@ -1294,13 +1375,19 @@ SUMMARIZERS: dict[str, Callable[[], tuple[str, str] | None]] = {
 # =============================================================================
 # RAG retrieval
 # =============================================================================
-def retrieve_context(question: str) -> str:
+def retrieve_context(question: str) -> tuple[str, list[str]]:
     """Pick datasets matching keyword patterns + base datasets, summarize each.
 
     Always includes BASE_DATASETS (state_risk_index + geo_variation). Iterates
     DATASET_REGISTRY; for each pattern that matches the lowercased question,
     queues those datasets. Loads each summarizer (deduplicated) and joins
     with section headers.
+
+    Returns:
+        (context_string, datasets_loaded) — datasets_loaded is the list of
+        dataset keys whose summarizers actually produced non-None output, in
+        the order they appear in the context. Names that match patterns but
+        have no summarizer or whose summarizer raises/returns None are omitted.
     """
     q_lower = question.lower()
     # Matched datasets first (highest relevance), BASE_DATASETS last so the
@@ -1321,6 +1408,7 @@ def retrieve_context(question: str) -> str:
           file=sys.stderr)
 
     parts: list[str] = []
+    loaded: list[str] = []
     for name in selected:
         fn = SUMMARIZERS.get(name)
         if fn is None:
@@ -1332,10 +1420,12 @@ def retrieve_context(question: str) -> str:
             header, csv_text = result
             parts.append(f"=== {header} ===")
             parts.append(csv_text)
+            loaded.append(name)
         except Exception as e:
             print(f"[retrieve_context] WARN: {name} failed: {e}", file=sys.stderr)
             continue
-    return "\n\n".join(parts) if parts else "(no context retrieved)"
+    context = "\n\n".join(parts) if parts else "(no context retrieved)"
+    return context, loaded
 
 
 # =============================================================================
@@ -1362,17 +1452,19 @@ def _format_chain(chain: list[str]) -> str:
 # =============================================================================
 # Public entry point
 # =============================================================================
-def query_analyst(question: str) -> tuple[str, str, int, str]:
-    """Walks a size-routed provider chain; returns (response, provider_used, context_chars, route_label).
+def query_analyst(question: str) -> tuple[str, str, int, str, list[str]]:
+    """Walks a size-routed provider chain; returns
+    (response, provider_used, context_chars, route_label, datasets_used).
 
-    1. retrieve_context(question) builds a keyword-targeted context.
+    1. retrieve_context(question) builds a keyword-targeted context and a
+       list of the dataset keys actually loaded.
     2. If len(context) < 4000 chars → SMALL chain (Groq first, free + fast).
     3. If len(context) >= 4000 chars → LARGE chain (OpenAI first, full
        context; Groq appended as last resort with trimming).
     4. Each provider receives a context sized for its rate-limit profile via
        trim_context_for_provider() (only Groq trims).
     """
-    context = retrieve_context(question)
+    context, datasets_used = retrieve_context(question)
     context_chars = len(context)
 
     if context_chars < SMALL_CONTEXT_THRESHOLD:
@@ -1395,7 +1487,7 @@ def query_analyst(question: str) -> tuple[str, str, int, str]:
             sized_context = trim_context_for_provider(context, provider)
             response = _HANDLERS[provider](question, sized_context)
             if response and response.strip():
-                return response, provider, context_chars, route_label
+                return response, provider, context_chars, route_label, datasets_used
         except Exception as e:
             last_error = e
             continue
