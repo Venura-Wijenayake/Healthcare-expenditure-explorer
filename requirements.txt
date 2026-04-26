@@ -3,5 +3,6 @@ pandas
 plotly
 requests
 groq
+openai
 google-generativeai
 together

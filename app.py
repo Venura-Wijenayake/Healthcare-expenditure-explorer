@@ -6,7 +6,6 @@ import plotly.graph_objects as go
 from data_loader import fetch_part_d_data, fetch_part_b_data, load_geo_variation, load_ahrf, load_hpsa
 from ai_analyst import (
     query_analyst,
-    build_context,
     get_active_provider,
     PROVIDER_LABELS,
 )
@@ -897,7 +896,8 @@ with tab7:
     else:
         st.caption(
             f"Active provider: **{PROVIDER_LABELS[active]}** "
-            f"(falls back to Gemini → Together AI if {PROVIDER_LABELS[active]} fails)."
+            f"(chain: Groq → GPT-4o mini → Gemini → Together AI; each query routes to "
+            "relevant datasets via keyword retrieval)."
         )
 
     EXAMPLE_QUESTIONS = [
@@ -940,8 +940,7 @@ with tab7:
         with st.spinner("Thinking…"):
             t0 = time.time()
             try:
-                context = build_context()
-                response, provider_used = query_analyst(question.strip(), context)
+                response, provider_used = query_analyst(question.strip())
                 elapsed = time.time() - t0
                 st.session_state.ai_history.insert(0, {
                     "q": question.strip(),
