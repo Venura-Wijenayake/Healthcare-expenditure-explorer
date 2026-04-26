@@ -329,10 +329,12 @@ def _sum_cdc_wastewater() -> tuple[str, str] | None:
     df = df.sort_values(["state_territory", "pathogen_target", "week_end"])
     first = pd.to_datetime(last_4[0]).date()
     last = pd.to_datetime(last_4[-1]).date()
+    # 51 reporting jurisdictions × 4 weeks × 3 pathogens = 612 rows max;
+    # raise the cap so late-alphabet states (Texas, New York, …) aren't truncated.
     return _section(
         f"CDC NWSS WASTEWATER (most recent 4 weeks: {first} to {last}, "
         "wval_pop_weighted_mean = population-weighted concentration)",
-        df, max_rows=400,
+        df, max_rows=700,
     )
 
 
@@ -406,18 +408,30 @@ def _sum_nci_cancer() -> tuple[str, str] | None:
         usecols=["AREA", "YEAR", "SITE", "RACE", "SEX",
                  "EVENT_TYPE", "AGE_ADJUSTED_RATE", "COUNT"],
     )
+    # YEAR is stored as a string in the source bundle; coerce before comparing.
+    df["YEAR"] = pd.to_numeric(df["YEAR"], errors="coerce")
+    df["AGE_ADJUSTED_RATE"] = pd.to_numeric(df["AGE_ADJUSTED_RATE"], errors="coerce")
     df = df[(df["SITE"] == "All Cancer Sites Combined")
             & (df["SEX"] == "Male and Female") & (df["RACE"] == "All Races")]
-    df["AGE_ADJUSTED_RATE"] = pd.to_numeric(df["AGE_ADJUSTED_RATE"], errors="coerce")
-    df = df.dropna(subset=["AGE_ADJUSTED_RATE"])
-    latest = int(df["YEAR"].max())
-    df = df[df["YEAR"] == latest][["AREA", "EVENT_TYPE", "AGE_ADJUSTED_RATE", "COUNT"]].copy()
+    df = df.dropna(subset=["AGE_ADJUSTED_RATE", "YEAR"])
+    # Incidence and Mortality have different latest years (Mortality typically
+    # lags by one year). Take each event_type's own most-recent year so both
+    # are represented for every state.
+    latest_per_event = df.groupby("EVENT_TYPE")["YEAR"].transform("max")
+    df = df[df["YEAR"] == latest_per_event][[
+        "AREA", "EVENT_TYPE", "YEAR", "AGE_ADJUSTED_RATE", "COUNT",
+    ]].copy()
     df["AGE_ADJUSTED_RATE"] = df["AGE_ADJUSTED_RATE"].round(1)
-    df.columns = ["state", "event_type", "age_adj_rate_per_100k", "count"]
+    df["YEAR"] = df["YEAR"].astype(int)
+    df.columns = ["state", "event_type", "year", "age_adj_rate_per_100k", "count"]
     df = df.sort_values(["state", "event_type"])
+    inc_yr = int(df.loc[df["event_type"] == "Incidence", "year"].max()) if (df["event_type"] == "Incidence").any() else None
+    mort_yr = int(df.loc[df["event_type"] == "Mortality", "year"].max()) if (df["event_type"] == "Mortality").any() else None
+    yr_label = f"Incidence: {inc_yr}, Mortality: {mort_yr}"
+    # 52 jurisdictions × 2 event types ≈ 103-104 rows; cap leaves headroom.
     return _section(
-        f"NCI/CDC CANCER (year: {latest}, All Sites, Both Sexes, All Races; Incidence + Mortality)",
-        df, max_rows=110,
+        f"NCI/CDC CANCER ({yr_label}; All Sites, Both Sexes, All Races)",
+        df, max_rows=120,
     )
 
 
