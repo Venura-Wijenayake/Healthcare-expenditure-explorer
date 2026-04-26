@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 from data_loader import fetch_part_d_data, fetch_part_b_data, load_geo_variation, load_ahrf, load_hpsa
 
 st.set_page_config(
@@ -38,12 +39,13 @@ if search_term:
     ]
 
 # Tabs
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📊 Overview",
     "💊 Drug Analysis",
     "💰 Spending Deep Dive",
     "💉 Part B",
-    "🗺️ Geography"
+    "🗺️ Geography",
+    "🔍 Compare States",
 ])
 
 with tab1:
@@ -156,10 +158,18 @@ with tab2:
         comparison_df["Avg/Patient ($)"] = comparison_df["Avg_Spnd_Per_Bene"].round(0).apply(lambda x: f"${x:,.0f}")
         comparison_df = comparison_df.rename(columns={"Brnd_Name": "Brand", "Gnrc_Name": "Generic"})
 
+        comparison_display = comparison_df[["Brand", "Generic", "Total Spending ($B)", "Beneficiaries (M)", "Avg/Patient ($)"]]
         st.dataframe(
-            comparison_df[["Brand", "Generic", "Total Spending ($B)", "Beneficiaries (M)", "Avg/Patient ($)"]],
+            comparison_display,
             use_container_width=True,
             hide_index=True
+        )
+        st.download_button(
+            "📥 Download Comparison as CSV",
+            data=comparison_display.to_csv(index=False).encode("utf-8"),
+            file_name=f"drug_comparison_{selected_year}.csv",
+            mime="text/csv",
+            key="dl_drug_comparison",
         )
 
         fig5 = px.bar(
@@ -213,6 +223,13 @@ with tab2:
         fig6.update_layout(yaxis={"categoryorder": "total ascending"})
         st.plotly_chart(fig6, use_container_width=True)
         st.dataframe(top_growers, use_container_width=True, hide_index=True)
+        st.download_button(
+            "📥 Download Top Growers as CSV",
+            data=top_growers.to_csv(index=False).encode("utf-8"),
+            file_name=f"top_growers_{col_2024}_to_{col_2025}.csv",
+            mime="text/csv",
+            key="dl_top_growers",
+        )
     else:
         st.info("Need at least 2 years of data for year-over-year comparison.")
 
@@ -325,6 +342,13 @@ with tab3:
         display_anomalies.columns = ["Brand", "Generic", "Total Spending ($B)", "Beneficiaries", "Avg/Patient ($)"]
         display_anomalies["Avg/Patient ($)"] = display_anomalies["Avg/Patient ($)"].apply(lambda x: f"${x:,.0f}")
         st.dataframe(display_anomalies, use_container_width=True, hide_index=True)
+        st.download_button(
+            "📥 Download Anomalies as CSV",
+            data=display_anomalies.to_csv(index=False).encode("utf-8"),
+            file_name=f"spending_anomalies_{selected_year}.csv",
+            mime="text/csv",
+            key="dl_anomalies",
+        )
     else:
         st.success("No significant spending anomalies detected in the current selection.")
 
@@ -631,6 +655,34 @@ with tab5:
     col_r2.metric("Lowest Risk State", lowest["state"], f"{lowest['risk_score']:.1f}")
     col_r3.metric("National Average", f"{df_risk['risk_score'].mean():.1f}")
 
+    # Choropleth — State Healthcare Risk Map
+    st.markdown("**State Healthcare Risk Map**")
+    fig_risk_map = px.choropleth(
+        df_risk,
+        locations="state_abbr",
+        locationmode="USA-states",
+        color="risk_score",
+        scope="usa",
+        color_continuous_scale="RdYlGn_r",
+        range_color=(0, 100),
+        labels={"risk_score": "Risk Score"},
+        hover_name="state",
+        hover_data={
+            "risk_score": ":.1f",
+            "risk_tier": True,
+            "dim_spending": ":.1f",
+            "dim_supply": ":.1f",
+            "dim_shortage": ":.1f",
+            "dim_disease": ":.1f",
+            "dim_insurance": ":.1f",
+            "dim_hospital_quality": ":.1f",
+            "dim_poverty": ":.1f",
+            "state_abbr": False,
+        },
+    )
+    fig_risk_map.update_layout(margin={"l": 0, "r": 0, "t": 0, "b": 0})
+    st.plotly_chart(fig_risk_map, use_container_width=True)
+
     tier_colors = {"High": "#d62728", "Medium": "#ff9800", "Low": "#2ca02c"}
     df_risk_sorted = df_risk.sort_values("risk_score", ascending=True).copy()
     df_risk_sorted["risk_score_display"] = df_risk_sorted["risk_score"].round(1)
@@ -678,10 +730,18 @@ with tab5:
     ]
     for c in ["Spending", "Supply", "Shortage", "Disease", "Insurance", "Hosp. Quality", "Poverty", "Risk Score"]:
         table_df[c] = table_df[c].round(1)
+    table_df_sorted = table_df.sort_values("Rank")
     st.dataframe(
-        table_df.sort_values("Rank"),
+        table_df_sorted,
         use_container_width=True,
         hide_index=True,
+    )
+    st.download_button(
+        "📥 Download State Risk Index as CSV",
+        data=table_df_sorted.to_csv(index=False).encode("utf-8"),
+        file_name="state_risk_index.csv",
+        mime="text/csv",
+        key="dl_state_risk",
     )
 
     st.caption(
@@ -692,3 +752,120 @@ with tab5:
         "from BRFSS, most-recent year per state) · **Insurance** (% uninsured all-income, SAHIE) · "
         "**Hospital Quality** (mean overall star rating, inverted) · **Poverty** (poverty rate all ages, SAIPE)."
     )
+
+with tab6:
+    st.subheader("🔍 Compare States")
+    st.markdown(
+        "Side-by-side comparison of any two states across the 7 healthcare risk dimensions. "
+        "Higher dimension scores indicate worse outcomes."
+    )
+
+    df_cmp = pd.read_csv("data/state_risk_index.csv")
+    state_options = df_cmp.sort_values("state")["state"].tolist()
+
+    DIM_COLS = [
+        "dim_spending", "dim_supply", "dim_shortage", "dim_disease",
+        "dim_insurance", "dim_hospital_quality", "dim_poverty",
+    ]
+    DIM_LABELS = {
+        "dim_spending": "Spending",
+        "dim_supply": "Supply",
+        "dim_shortage": "Shortage",
+        "dim_disease": "Disease",
+        "dim_insurance": "Insurance",
+        "dim_hospital_quality": "Hospital Quality",
+        "dim_poverty": "Poverty",
+    }
+
+    col_a, col_b = st.columns(2)
+    default_a = state_options.index("Mississippi") if "Mississippi" in state_options else 0
+    default_b = state_options.index("Massachusetts") if "Massachusetts" in state_options else 1
+    state_a = col_a.selectbox("State A", state_options, index=default_a, key="cmp_state_a")
+    state_b = col_b.selectbox("State B", state_options, index=default_b, key="cmp_state_b")
+
+    if state_a == state_b:
+        st.info("Pick two different states to compare.")
+    else:
+        row_a = df_cmp[df_cmp["state"] == state_a].iloc[0]
+        row_b = df_cmp[df_cmp["state"] == state_b].iloc[0]
+
+        labels = [DIM_LABELS[c] for c in DIM_COLS]
+        vals_a = [row_a[c] for c in DIM_COLS]
+        vals_b = [row_b[c] for c in DIM_COLS]
+
+        fig_radar = go.Figure()
+        fig_radar.add_trace(go.Scatterpolar(
+            r=vals_a + [vals_a[0]],
+            theta=labels + [labels[0]],
+            fill="toself",
+            name=state_a,
+            line=dict(color="#d62728"),
+        ))
+        fig_radar.add_trace(go.Scatterpolar(
+            r=vals_b + [vals_b[0]],
+            theta=labels + [labels[0]],
+            fill="toself",
+            name=state_b,
+            line=dict(color="#1f77b4"),
+        ))
+        fig_radar.update_layout(
+            polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
+            showlegend=True,
+            height=500,
+            margin={"l": 0, "r": 0, "t": 30, "b": 0},
+        )
+        st.plotly_chart(fig_radar, use_container_width=True)
+
+        cmp_table = pd.DataFrame({
+            "Dimension": labels,
+            state_a: [round(v, 1) for v in vals_a],
+            state_b: [round(v, 1) for v in vals_b],
+            "Difference (A − B)": [round(a - b, 1) for a, b in zip(vals_a, vals_b)],
+        })
+        composite_row = pd.DataFrame({
+            "Dimension": ["Risk Score"],
+            state_a: [round(row_a["risk_score"], 1)],
+            state_b: [round(row_b["risk_score"], 1)],
+            "Difference (A − B)": [round(row_a["risk_score"] - row_b["risk_score"], 1)],
+        })
+        cmp_table = pd.concat([cmp_table, composite_row], ignore_index=True)
+        st.dataframe(cmp_table, use_container_width=True, hide_index=True)
+        st.download_button(
+            "📥 Download Comparison as CSV",
+            data=cmp_table.to_csv(index=False).encode("utf-8"),
+            file_name=f"compare_{state_a}_vs_{state_b}.csv".replace(" ", "_"),
+            mime="text/csv",
+            key="dl_state_compare",
+        )
+
+        # Plain-English summary
+        THRESHOLD = 5  # percentile points to count as a meaningful gap
+        worse, better = [], []
+        for col, label in zip(DIM_COLS, labels):
+            diff = row_a[col] - row_b[col]
+            if diff >= THRESHOLD:
+                worse.append(label)
+            elif diff <= -THRESHOLD:
+                better.append(label)
+
+        composite_diff = row_a["risk_score"] - row_b["risk_score"]
+        if composite_diff > 0:
+            headline = f"Overall, **{state_a}** has higher healthcare risk than **{state_b}** (risk score {row_a['risk_score']:.1f} vs {row_b['risk_score']:.1f})."
+        elif composite_diff < 0:
+            headline = f"Overall, **{state_a}** has lower healthcare risk than **{state_b}** (risk score {row_a['risk_score']:.1f} vs {row_b['risk_score']:.1f})."
+        else:
+            headline = f"**{state_a}** and **{state_b}** have nearly identical composite risk scores."
+
+        parts = [headline]
+        if worse:
+            parts.append(f"{state_a} scores **worse** than {state_b} on: " + ", ".join(worse) + ".")
+        if better:
+            parts.append(f"{state_a} scores **better** than {state_b} on: " + ", ".join(better) + ".")
+        if not worse and not better:
+            parts.append("No dimensions show a meaningful gap (≥5 percentile points) between the two states.")
+        st.markdown(" ".join(parts))
+
+        st.caption(
+            "Reminder: each dimension is percentile-ranked 0–100 across all 51 jurisdictions, with higher = "
+            "worse outcome. A 5-point gap is the threshold for calling out a difference."
+        )
