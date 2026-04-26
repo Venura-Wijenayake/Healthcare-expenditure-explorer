@@ -1041,28 +1041,69 @@ def _sum_cdc_nndss() -> tuple[str, str] | None:
     df = pd.read_csv(
         DATA / "cdc_nndss.csv", low_memory=False,
         usecols=["disease_table", "reporting_area", "year", "week",
-                 "disease", "cum_ytd_current"],
+                 "disease", "cum_ytd_current", "annual_cases"],
     )
-    df = df[df["disease_table"] == "weekly_nndss"]
-    df["cum_ytd_current"] = pd.to_numeric(df["cum_ytd_current"], errors="coerce")
-    df = df.dropna(subset=["cum_ytd_current"])
-    latest_year = int(df["year"].max())
-    df = df[df["year"] == latest_year]
-    # Take the latest week's cumulative-YTD per (state, disease) — that's the annual count.
-    annual = (df.sort_values("week")
-                .groupby(["reporting_area", "disease"], as_index=False)["cum_ytd_current"]
-                .last())
-    # Filter to the user-specified diseases of interest + a few high-value extras.
+
+    # weekly_nndss: cum_ytd_current at the latest week of the latest year is the annual count
+    weekly = df[df["disease_table"] == "weekly_nndss"].copy()
+    weekly["cum_ytd_current"] = pd.to_numeric(weekly["cum_ytd_current"], errors="coerce")
+    weekly = weekly.dropna(subset=["cum_ytd_current"])
+    weekly_year = int(weekly["year"].max())
+    weekly = weekly[weekly["year"] == weekly_year]
+    weekly_annual = (
+        weekly.sort_values("week")
+              .groupby(["reporting_area", "disease"], as_index=False)["cum_ytd_current"]
+              .last()
+              .rename(columns={"cum_ytd_current": "cases"})
+    )
+    weekly_annual["year"] = weekly_year
+
+    # lyme_aggregated: annual_cases per (state × disease × case_status × sex × age) — sum
+    # across strata to get total annual cases per state. Normalize state abbreviations
+    # to the uppercase full-name form used by weekly_nndss for consistency.
+    lyme = df[df["disease_table"] == "lyme_aggregated"].copy()
+    lyme["annual_cases"] = pd.to_numeric(lyme["annual_cases"], errors="coerce")
+    lyme = lyme.dropna(subset=["annual_cases"])
+    lyme_year = int(lyme["year"].max())
+    lyme = lyme[lyme["year"] == lyme_year]
+    abbr_to_name = {
+        "AL": "ALABAMA", "AK": "ALASKA", "AZ": "ARIZONA", "AR": "ARKANSAS",
+        "CA": "CALIFORNIA", "CO": "COLORADO", "CT": "CONNECTICUT", "DE": "DELAWARE",
+        "DC": "DISTRICT OF COLUMBIA", "FL": "FLORIDA", "GA": "GEORGIA", "HI": "HAWAII",
+        "ID": "IDAHO", "IL": "ILLINOIS", "IN": "INDIANA", "IA": "IOWA", "KS": "KANSAS",
+        "KY": "KENTUCKY", "LA": "LOUISIANA", "ME": "MAINE", "MD": "MARYLAND",
+        "MA": "MASSACHUSETTS", "MI": "MICHIGAN", "MN": "MINNESOTA", "MS": "MISSISSIPPI",
+        "MO": "MISSOURI", "MT": "MONTANA", "NE": "NEBRASKA", "NV": "NEVADA",
+        "NH": "NEW HAMPSHIRE", "NJ": "NEW JERSEY", "NM": "NEW MEXICO", "NY": "NEW YORK",
+        "NC": "NORTH CAROLINA", "ND": "NORTH DAKOTA", "OH": "OHIO", "OK": "OKLAHOMA",
+        "OR": "OREGON", "PA": "PENNSYLVANIA", "RI": "RHODE ISLAND",
+        "SC": "SOUTH CAROLINA", "SD": "SOUTH DAKOTA", "TN": "TENNESSEE", "TX": "TEXAS",
+        "UT": "UTAH", "VT": "VERMONT", "VA": "VIRGINIA", "WA": "WASHINGTON",
+        "WV": "WEST VIRGINIA", "WI": "WISCONSIN", "WY": "WYOMING",
+    }
+    lyme["reporting_area"] = lyme["reporting_area"].map(abbr_to_name).fillna(lyme["reporting_area"])
+    lyme_annual = (
+        lyme.groupby(["reporting_area", "disease"], as_index=False)["annual_cases"]
+            .sum()
+            .rename(columns={"annual_cases": "cases"})
+    )
+    lyme_annual["year"] = lyme_year
+
+    annual = pd.concat([weekly_annual, lyme_annual], ignore_index=True)
+    annual["cases"] = annual["cases"].round(0).astype(int)
+
     keep_diseases = (
         "Tuberculosis", "Hepatitis", "Salmonel", "Pertussis", "Mumps", "Measles",
         "Lyme", "Legionel", "Meningococ", "Listeriosis", "STEC", "Vibrio",
     )
     annual = annual[annual["disease"].str.startswith(keep_diseases, na=False)]
-    annual["cum_ytd_current"] = annual["cum_ytd_current"].astype(int)
-    annual = annual.sort_values(["reporting_area", "disease"])
+    annual = annual[["reporting_area", "year", "disease", "cases"]].sort_values(
+        ["reporting_area", "disease"]
+    )
+    yr_label = f"weekly NNDSS: {weekly_year}, Lyme aggregated: {lyme_year}"
     return _section(
-        f"CDC NNDSS NOTIFIABLE DISEASE CASES (year: {latest_year}, cumulative YTD by state × disease)",
-        annual, max_rows=1200,
+        f"CDC NNDSS NOTIFIABLE DISEASE CASES ({yr_label}; annual counts by state × disease)",
+        annual, max_rows=1300,
     )
 
 
