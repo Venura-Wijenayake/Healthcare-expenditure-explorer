@@ -612,3 +612,83 @@ with tab5:
     fig_shortage.update_layout(xaxis={"categoryorder": "array", "categoryarray": top15_shortage["State Abbreviation"].tolist()})
     st.plotly_chart(fig_shortage, use_container_width=True)
     st.caption("Source: HRSA HPSA designations (BCD_HPSA_FCT_DET), filtered to HPSA Status = 'Designated'. 'Practitioners Needed' = sum of HPSA Shortage (FTEs to reach target ratio). NY is an outlier (~96k total) due to many population-type designations in NYC.")
+
+    st.divider()
+
+    # === State Risk Index (composite of 7 dimensions) ===
+    st.subheader("🎯 State Risk Index")
+    st.markdown(
+        "Composite healthcare risk score across 7 dimensions, percentile-ranked 0–100. "
+        "Higher score = greater risk."
+    )
+
+    df_risk = pd.read_csv("data/state_risk_index.csv")
+
+    col_r1, col_r2, col_r3 = st.columns(3)
+    highest = df_risk.iloc[df_risk["risk_score"].idxmax()]
+    lowest = df_risk.iloc[df_risk["risk_score"].idxmin()]
+    col_r1.metric("Highest Risk State", highest["state"], f"{highest['risk_score']:.1f}")
+    col_r2.metric("Lowest Risk State", lowest["state"], f"{lowest['risk_score']:.1f}")
+    col_r3.metric("National Average", f"{df_risk['risk_score'].mean():.1f}")
+
+    tier_colors = {"High": "#d62728", "Medium": "#ff9800", "Low": "#2ca02c"}
+    df_risk_sorted = df_risk.sort_values("risk_score", ascending=True).copy()
+    df_risk_sorted["risk_score_display"] = df_risk_sorted["risk_score"].round(1)
+
+    fig_risk = px.bar(
+        df_risk_sorted,
+        x="risk_score",
+        y="state_abbr",
+        orientation="h",
+        color="risk_tier",
+        color_discrete_map=tier_colors,
+        category_orders={
+            "state_abbr": df_risk_sorted["state_abbr"].tolist(),
+            "risk_tier": ["High", "Medium", "Low"],
+        },
+        labels={"risk_score": "Risk Score (0–100)", "state_abbr": "State", "risk_tier": "Tier"},
+        hover_name="state",
+        hover_data={
+            "risk_score_display": ":.1f",
+            "risk_rank": True,
+            "risk_tier": True,
+            "state_abbr": False,
+            "risk_score": False,
+        },
+        text="risk_score_display",
+    )
+    fig_risk.update_traces(texttemplate="%{text:.1f}", textposition="outside")
+    fig_risk.update_layout(height=950, margin={"l": 0, "r": 40, "t": 10, "b": 10})
+    st.plotly_chart(fig_risk, use_container_width=True)
+
+    st.markdown("**All states — dimension scores and tier:**")
+    table_df = df_risk[
+        [
+            "state", "state_abbr",
+            "dim_spending", "dim_supply", "dim_shortage", "dim_disease",
+            "dim_insurance", "dim_hospital_quality", "dim_poverty",
+            "risk_score", "risk_rank", "risk_tier",
+        ]
+    ].copy()
+    table_df.columns = [
+        "State", "Abbr",
+        "Spending", "Supply", "Shortage", "Disease",
+        "Insurance", "Hosp. Quality", "Poverty",
+        "Risk Score", "Rank", "Tier",
+    ]
+    for c in ["Spending", "Supply", "Shortage", "Disease", "Insurance", "Hosp. Quality", "Poverty", "Risk Score"]:
+        table_df[c] = table_df[c].round(1)
+    st.dataframe(
+        table_df.sort_values("Rank"),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    st.caption(
+        "Methodology: 7 dimensions percentile-ranked 0–100 across the 51 jurisdictions, then averaged with "
+        "equal weights. Higher = worse outcome. Dimensions: **Spending** (Medicare standardized payment per "
+        "beneficiary, 2023) · **Supply** (active physicians per 100k, AHRF 2023, inverted) · **Shortage** (HPSA "
+        "primary-care score weighted by FTEs needed) · **Disease** (mean of diabetes + obesity + CHD prevalence "
+        "from BRFSS, most-recent year per state) · **Insurance** (% uninsured all-income, SAHIE) · "
+        "**Hospital Quality** (mean overall star rating, inverted) · **Poverty** (poverty rate all ages, SAIPE)."
+    )
