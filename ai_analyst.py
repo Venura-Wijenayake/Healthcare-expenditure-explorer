@@ -25,7 +25,7 @@ DATA = Path("data")
 
 SYSTEM_PROMPT = (
     "You are an expert healthcare policy analyst and data scientist with access to "
-    "73 federal datasets covering Medicare spending, workforce supply, disease burden, "
+    "81 federal datasets covering Medicare spending, workforce supply, disease burden, "
     "hospital quality, social determinants, vaccination, and more across all 50 US states. "
     "Your job is to answer questions by reasoning across these datasets, identifying "
     "patterns, correlations, and actionable insights. Always cite which datasets you are "
@@ -192,6 +192,14 @@ DATASET_REGISTRY: dict[str, list[str]] = {
     "oral health|dental|fluoride|tooth": ["cdc_oral_health", "hpsa_dental"],
     "injury|violence|suicide|homicide|firearm": ["cdc_wisqars", "cdc_drug_overdose"],
     "open payments|industry|pharma|manufacturer": ["cms_open_payments"],
+    "infection|MRSA|CLABSI|CAUTI|C\\.diff|sepsis|HAI|hospital.acquired": ["cdc_hai", "cms_timely_care"],
+    "emergency.department|ED.wait|wait.time|ER.time|timely.care": ["cms_timely_care"],
+    "tuberculosis|TB|hepatitis|Lyme|salmonella|notifiable|pertussis|mumps|measles": ["cdc_nndss"],
+    "unemployment|jobs|labor.market|employment": ["bls_unemployment"],
+    "nurse.corps|nursing.scholarship|loan.repayment|nurse.pipeline": ["hrsa_nurse_corps"],
+    "alzheimer|dementia|cognitive.decline|caregiver.burden|memory": ["cdc_alzheimers"],
+    "mental.health.facility|mental.health.bed|psychiatric.bed|inpatient.mental": ["samhsa_nmhss"],
+    "skilled.nursing|SNF|post.acute|rehabilitation.facility|rehab.quality": ["cms_snf"],
 }
 
 BASE_DATASETS = ["state_risk_index", "geo_variation_2014_2023"]
@@ -986,6 +994,195 @@ def _sum_cms_open_payments() -> tuple[str, str] | None:
     return _section("CMS OPEN PAYMENTS 2023 (state-aggregated)", df, max_rows=60)
 
 
+# ----- Final batch (8 new datasets) -----
+
+def _sum_cdc_hai() -> tuple[str, str] | None:
+    df = pd.read_csv(
+        DATA / "cdc_hai.csv", low_memory=False,
+        usecols=["year", "state", "infection_type", "num_hospitals_reporting",
+                 "sir", "sir_ci_lower", "sir_ci_upper"],
+    )
+    for c in ["sir", "sir_ci_lower", "sir_ci_upper"]:
+        df[c] = pd.to_numeric(df[c], errors="coerce").round(2)
+    return _section(
+        "CDC NHSN HAI Standardized Infection Ratios (2024; SIR=1.0 means observed = predicted; "
+        "SIR<1 better than predicted, SIR>1 worse)",
+        df, max_rows=350,
+    )
+
+
+def _sum_cms_timely_care() -> tuple[str, str] | None:
+    df = pd.read_csv(
+        DATA / "cms_timely_care.csv", low_memory=False,
+        usecols=["State", "Condition", "Measure ID", "Measure Name", "Score"],
+    )
+    # Keep the headline measures: ED throughput, sepsis bundle, flu vax, head-CT-stroke,
+    # opioid safety. Skip the per-volume strata (VHIGH/HIGH/MEDIUM/LOW variants of OP_18).
+    keep_ids = {
+        "OP_18b",  # median ED time, all
+        "OP_22",   # left without being seen
+        "SEP_1",   # sepsis bundle compliance
+        "SEV_SEP_3HR", "SEV_SEP_6HR", "SEP_SH_3HR", "SEP_SH_6HR",
+        "IMM_3",   # healthcare personnel flu vax
+        "OP_23",   # head CT within 45 min for stroke
+        "SAFE_USE_OF_OPIOIDS",
+        "OP_29", "OP_31",
+    }
+    df = df[df["Measure ID"].isin(keep_ids)]
+    df["Score"] = pd.to_numeric(df["Score"], errors="coerce")
+    return _section(
+        "CMS TIMELY & EFFECTIVE CARE — STATE (2024; ED throughput, sepsis bundle, "
+        "flu vax, stroke head-CT, opioid safety)",
+        df, max_rows=600,
+    )
+
+
+def _sum_cdc_nndss() -> tuple[str, str] | None:
+    df = pd.read_csv(
+        DATA / "cdc_nndss.csv", low_memory=False,
+        usecols=["disease_table", "reporting_area", "year", "week",
+                 "disease", "cum_ytd_current"],
+    )
+    df = df[df["disease_table"] == "weekly_nndss"]
+    df["cum_ytd_current"] = pd.to_numeric(df["cum_ytd_current"], errors="coerce")
+    df = df.dropna(subset=["cum_ytd_current"])
+    latest_year = int(df["year"].max())
+    df = df[df["year"] == latest_year]
+    # Take the latest week's cumulative-YTD per (state, disease) — that's the annual count.
+    annual = (df.sort_values("week")
+                .groupby(["reporting_area", "disease"], as_index=False)["cum_ytd_current"]
+                .last())
+    # Filter to the user-specified diseases of interest + a few high-value extras.
+    keep_diseases = (
+        "Tuberculosis", "Hepatitis", "Salmonel", "Pertussis", "Mumps", "Measles",
+        "Lyme", "Legionel", "Meningococ", "Listeriosis", "STEC", "Vibrio",
+    )
+    annual = annual[annual["disease"].str.startswith(keep_diseases, na=False)]
+    annual["cum_ytd_current"] = annual["cum_ytd_current"].astype(int)
+    annual = annual.sort_values(["reporting_area", "disease"])
+    return _section(
+        f"CDC NNDSS NOTIFIABLE DISEASE CASES (year: {latest_year}, cumulative YTD by state × disease)",
+        annual, max_rows=1200,
+    )
+
+
+def _sum_bls_unemployment() -> tuple[str, str] | None:
+    df = pd.read_csv(DATA / "bls_unemployment.csv")
+    df["unemployment_rate"] = pd.to_numeric(df["unemployment_rate"], errors="coerce")
+    df = df.dropna(subset=["unemployment_rate"])
+    # Latest (year, month) per state — the most recent published value
+    latest_idx = df.groupby("state")[["year", "month"]].apply(
+        lambda g: g.sort_values(["year", "month"]).index[-1]
+    )
+    df = df.loc[latest_idx, ["state", "year", "month", "unemployment_rate"]].sort_values("state")
+    return _section(
+        "BLS STATE UNEMPLOYMENT (latest published month per state, monthly LAUS series)",
+        df, max_rows=55,
+    )
+
+
+def _sum_hrsa_nurse_corps() -> tuple[str, str] | None:
+    df = pd.read_csv(
+        DATA / "hrsa_nurse_corps.csv",
+        usecols=["state", "fiscal_year", "total_field_strength",
+                 "nc_lrp_field_strength", "nc_sp_field_strength",
+                 "nc_lrp_dollars", "nc_total_dollars_estimated", "rural"],
+    )
+    return _section(
+        "HRSA NURSE CORPS (FY 2024; LRP loan-repayment + SP scholarship participants by state. "
+        "nc_lrp_dollars is real; SP $ are apportioned estimates)",
+        df, max_rows=60,
+    )
+
+
+def _sum_cdc_alzheimers() -> tuple[str, str] | None:
+    df = pd.read_csv(
+        DATA / "cdc_alzheimers.csv", low_memory=False,
+        usecols=["yearstart", "locationabbr", "class", "topic", "data_value",
+                 "stratificationcategory1", "stratification1",
+                 "stratificationcategory2", "stratification2"],
+    )
+    # Overall age stratum, no further breakout
+    df = df[
+        (df["stratificationcategory1"] == "Age Group")
+        & (df["stratification1"] == "Overall")
+        & (df["stratificationcategory2"].isna() | (df["stratificationcategory2"] == "Overall"))
+    ]
+    df["data_value"] = pd.to_numeric(df["data_value"], errors="coerce")
+    df = df.dropna(subset=["data_value"])
+    latest = int(df["yearstart"].max())
+    df = df[df["yearstart"] == latest]
+    # Keep cognitive decline + caregiver burden headline measures
+    keep_topics = (
+        "Subjective cognitive decline or memory loss among older adults",
+        "Need assistance with day-to-day activities because of subjective cognitive decline",
+        "Provide care for a friend or family member",
+        "Frequent mental distress",
+    )
+    df = df[df["topic"].str.startswith(keep_topics, na=False)]
+    df["data_value"] = df["data_value"].round(1)
+    df = df[["yearstart", "locationabbr", "class", "topic", "data_value"]].sort_values(
+        ["locationabbr", "topic"]
+    )
+    return _section(
+        f"CDC ALZHEIMER'S & HEALTHY AGING (year: {latest}; "
+        "subjective cognitive decline, caregiver burden, mental distress; %)",
+        df, max_rows=400,
+    )
+
+
+def _sum_samhsa_nmhss() -> tuple[str, str] | None:
+    df = pd.read_csv(
+        DATA / "samhsa_nmhss.csv",
+        usecols=["state", "total_facilities", "total_clients",
+                 "facilities_24h_hospital_inpatient", "facilities_24h_residential",
+                 "facilities_less_than_24h_care",
+                 "beds_hospital_inpatient", "beds_residential", "beds_total",
+                 "ft_psychiatric_hospital", "ft_state_hospital", "ft_cmhc",
+                 "ft_ccbhc", "ft_outpatient_mh"],
+    )
+    return _section(
+        "SAMHSA N-MHSS (2023 mental health treatment facilities; counts + bed capacity)",
+        df, max_rows=55,
+    )
+
+
+def _sum_cms_snf() -> tuple[str, str] | None:
+    # 184 MB long-format file — load only the columns + measure codes we want.
+    keep_codes = {
+        "S_004_01_PPR_PD_RSRR",      # Risk-standardized 30-day post-discharge readmission rate
+        "S_005_02_DTC_RS_RATE",      # Risk-standardized discharge-to-community rate
+        "S_006_01_MSPB_RATIO",       # Medicare Spending Per Beneficiary ratio
+    }
+    chunks = []
+    for chunk in pd.read_csv(
+        DATA / "cms_snf.csv", low_memory=False, chunksize=200_000,
+        usecols=["State", "Measure Code", "Score"],
+    ):
+        chunk = chunk[chunk["Measure Code"].isin(keep_codes)]
+        chunk["Score"] = pd.to_numeric(chunk["Score"], errors="coerce")
+        chunks.append(chunk.dropna(subset=["Score"]))
+    if not chunks:
+        return None
+    df = pd.concat(chunks, ignore_index=True)
+    # Aggregate to state × measure → mean
+    out = (df.groupby(["State", "Measure Code"], as_index=False)["Score"].mean()
+             .pivot(index="State", columns="Measure Code", values="Score"))
+    out.columns.name = None
+    out = out.rename(columns={
+        "S_004_01_PPR_PD_RSRR": "avg_readmission_rs_rate",
+        "S_005_02_DTC_RS_RATE": "avg_discharge_to_community_rs_rate",
+        "S_006_01_MSPB_RATIO": "avg_mspb_ratio",
+    }).reset_index()
+    for c in out.columns[1:]:
+        out[c] = out[c].round(3)
+    return _section(
+        "CMS SKILLED NURSING FACILITY QRP (state averages; readmission risk-standardized rate, "
+        "discharge to community, Medicare Spending Per Beneficiary ratio)",
+        out, max_rows=60,
+    )
+
+
 SUMMARIZERS: dict[str, Callable[[], tuple[str, str] | None]] = {
     "state_risk_index": _sum_state_risk_index,
     "geo_variation_2014_2023": _sum_geo_variation_2014_2023,
@@ -1042,6 +1239,14 @@ SUMMARIZERS: dict[str, Callable[[], tuple[str, str] | None]] = {
     "cdc_oral_health": _sum_cdc_oral_health,
     "cdc_wisqars": _sum_cdc_wisqars,
     "cms_open_payments": _sum_cms_open_payments,
+    "cdc_hai": _sum_cdc_hai,
+    "cms_timely_care": _sum_cms_timely_care,
+    "cdc_nndss": _sum_cdc_nndss,
+    "bls_unemployment": _sum_bls_unemployment,
+    "hrsa_nurse_corps": _sum_hrsa_nurse_corps,
+    "cdc_alzheimers": _sum_cdc_alzheimers,
+    "samhsa_nmhss": _sum_samhsa_nmhss,
+    "cms_snf": _sum_cms_snf,
 }
 
 
@@ -1062,7 +1267,9 @@ def retrieve_context(question: str) -> str:
     # query-relevant sections rather than the generic baseline.
     matched: list[str] = []
     for pattern, datasets in DATASET_REGISTRY.items():
-        if re.search(pattern, q_lower):
+        # IGNORECASE so registry patterns can use natural casing (e.g., "TB",
+        # "MRSA", "SNF") without missing matches in a lower-cased question.
+        if re.search(pattern, q_lower, re.IGNORECASE):
             for d in datasets:
                 if d not in matched:
                     matched.append(d)

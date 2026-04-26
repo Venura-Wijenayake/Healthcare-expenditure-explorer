@@ -881,7 +881,7 @@ with tab6:
 with tab7:
     st.subheader("🤖 AI Analyst")
     st.markdown(
-        "Ask natural-language questions across the 73 federal datasets that power this dashboard. "
+        "Ask natural-language questions across the 81 federal datasets that power this dashboard. "
         "The analyst reasons over pre-computed summaries (state risk index, Medicare spending, "
         "Medicaid drug spending, workforce density) and returns specific, data-driven insights."
     )
@@ -932,7 +932,7 @@ with tab7:
         "Your question",
         key="ai_question_input",
         height=80,
-        placeholder="Ask anything about the 73 datasets…",
+        placeholder="Ask anything about the 81 datasets…",
     )
 
     submit = st.button("🔍 Ask the analyst", type="primary", disabled=(active is None))
@@ -1079,11 +1079,21 @@ with tab8:
 
         # State-specific (73)
         {"name": "California HCAI Hospital Utilization", "agency": "CA HCAI", "category": "Hospital Utilization", "year_range": "2012–2017", "year_start": 2012, "year_end": 2017, "granularity": "Facility (CA only)", "description": "California hospital annual utilization measures, characteristics, and administrative geography.", "rows": 226902},
+
+        # Final batch (74-81)
+        {"name": "CDC NHSN Healthcare-Associated Infections", "agency": "CDC", "category": "Hospital Quality", "year_range": "2024", "year_start": 2024, "year_end": 2024, "granularity": "State × Infection type", "description": "Standardized Infection Ratios (SIRs) for CLABSI, CAUTI, MRSA-BSI, C. difficile, and surgical site infections (colon, abdominal hysterectomy) by state.", "rows": 330},
+        {"name": "CMS Timely & Effective Care — State", "agency": "CMS", "category": "Hospital Quality", "year_range": "2024", "year_start": 2024, "year_end": 2024, "granularity": "State × Measure", "description": "Process-of-care scores by state: ED throughput, sepsis bundle compliance, healthcare personnel flu vaccination, head-CT-within-45-min for stroke, opioid safety.", "rows": 1736},
+        {"name": "CDC NNDSS Notifiable Disease Surveillance", "agency": "CDC", "category": "Communicable Disease", "year_range": "2022–2024", "year_start": 2022, "year_end": 2024, "granularity": "State × Week × Disease", "description": "Weekly case counts for ~115 notifiable infectious diseases (TB, hepatitis, salmonella, Lyme, pertussis, mumps, measles, etc.); stacked NNDSS Weekly + Lyme aggregated.", "rows": 430925},
+        {"name": "BLS State Unemployment (LAUS)", "agency": "BLS", "category": "Economy", "year_range": "2020–2025", "year_start": 2020, "year_end": 2025, "granularity": "State × Month", "description": "Monthly state unemployment rates from BLS Local Area Unemployment Statistics (LAUS); fetched via FRED mirror (URN series).", "rows": 3672},
+        {"name": "HRSA Nurse Corps", "agency": "HRSA", "category": "Workforce", "year_range": "FY 2024", "year_start": 2024, "year_end": 2024, "granularity": "State", "description": "Nurse Corps Loan Repayment + Scholarship Program participants and federal investment by state. SP $ apportioned (HRSA does not publish per-state SP $).", "rows": 53},
+        {"name": "CDC Alzheimer's & Healthy Aging", "agency": "CDC", "category": "Aging Services", "year_range": "2015–2022", "year_start": 2015, "year_end": 2022, "granularity": "State × Topic", "description": "BRFSS-based older-adult indicators: subjective cognitive decline, caregiver burden/duration/intensity, frequent mental distress; deliberately excludes overlap with brfss_state_prevalence.", "rows": 69859},
+        {"name": "SAMHSA N-MHSS State Profiles", "agency": "SAMHSA", "category": "Behavioral Health", "year_range": "2023", "year_start": 2023, "year_end": 2023, "granularity": "State", "description": "National Mental Health Services Survey state aggregates: facility counts by type, bed capacity (88,893 beds nationally), treatment approaches, payer mix.", "rows": 54},
+        {"name": "CMS SNF Quality Reporting Program", "agency": "CMS", "category": "Long-term Care", "year_range": "Mar 2026 release", "year_start": 2022, "year_end": 2025, "granularity": "Facility × Measure", "description": "SNF QRP underlying measure scores (PPR-PD readmission, MSPB spending efficiency, IMPACT Act outcomes, HAI risk-standardized) — distinct from cms_nursing_home's rolled-up 5-stars.", "rows": 838071},
     ]
 
     df_sources = pd.DataFrame(DATASETS)
 
-    # KPIs across all 73 datasets (computed BEFORE filtering)
+    # KPIs across all 81 datasets (computed BEFORE filtering)
     total_rows = int(df_sources["rows"].sum())
     year_start_min = int(df_sources["year_start"].min())
     year_end_max = min(int(df_sources["year_end"].max()), 2026)  # cap at present

@@ -2,9 +2,9 @@
 
 The `data/` directory is gitignored. This manifest documents every dataset, its source, and how to re-fetch it. To rebuild the data layer from scratch, follow the URLs below or run the corresponding script in `scripts/`.
 
-**Inventory:** **73 datasets** across CMS, HRSA, CDC, AHRQ, NIH, NIMH, NCI, ONC, FDA, SAMHSA, Census, BLS, USDA, HUD, DOT, FCC, EPA, OSHA, AoA, RWJF, and California HCAI.
+**Inventory:** **81 datasets** across CMS, HRSA, CDC, AHRQ, NIH, NIMH, NCI, ONC, FDA, SAMHSA, Census, BLS, USDA, HUD, DOT, FCC, EPA, OSHA, AoA, RWJF, and California HCAI.
 
-**Total disk usage:** ~1.02 GB across 78 files (73 datasets + 4 data dictionaries + this manifest + `ahrf_tech_docs/`).
+**Total disk usage:** ~1.28 GB across 86 files (81 datasets + 4 data dictionaries + this manifest + `ahrf_tech_docs/`).
 
 **Coverage at a glance:**
 - **Geographic:** national, all 50 states + DC + territories (PR/GU/VI/AS/MP), ~3,200 counties, ~73,000 census tracts (food access), ~245,000 census tracts (CDC PLACES rolled up to county)
@@ -556,6 +556,87 @@ The `data/` directory is gitignored. This manifest documents every dataset, its 
 - **Source:** [CHHS Open Data — Hospital Annual Utilization Report](https://data.chhs.ca.gov/dataset/1902083c-f16a-434d-b8ac-f7a573a305df/resource/78622c04-a158-4c95-8ea3-7660725e9526/download/2012_current_year_hosp_util_mr.csv) — original Windows-1252, converted to UTF-8 on disk
 - **Granularity:** Long format — one row per (facility × year × measure)
 - **What it gives:** Facility identity (OSHPD_ID, name, address, lat/lon, county), characteristics (TYPE_LIC, TYPE_CNTRL, trauma center, teaching hospital), admin geography (assembly / senate / congressional district, census tract, health service area), and reported measures encoded by `Measure/Variable` code with description and Amount/Response.
+
+---
+
+## Final Batch (74–81)
+
+### 74. CDC NHSN Healthcare-Associated Infections (HAI) — state SIRs
+- **File:** `cdc_hai.csv` — 330 rows × 12 cols (22 KB)
+- **Year:** 2024
+- **Source:** [CDC HAI Progress Report — 2024 Acute Care Hospitals XLSX](https://www.cdc.gov/healthcare-associated-infections/media/excel/2024-SIR-ACH.xlsx) (data.cdc.gov Socrata had no HAI SIR resource at fetch time)
+- **Granularity:** state/territory × infection type (55 jurisdictions × 6 infections)
+- **What it gives:** Standardized Infection Ratios with 95% CI, observed and predicted counts, hospital reporting counts, validation status. Infections covered: CLABSI, CAUTI, MRSA hospital-onset BSI, hospital-onset C. difficile, SSI following colon surgery, SSI following abdominal hysterectomy. SIR < 1.0 means observed < predicted (better than the national baseline).
+- **Reproducibility:** `scripts/fetch_cdc_hai.py`
+
+### 75. CMS Timely & Effective Care — State
+- **File:** `cms_timely_care.csv` — 1,736 rows × 8 cols (355 KB)
+- **Period:** 2024 (rolling-window measures, end dates Dec 2024–Mar 2025)
+- **Source:** CMS Provider Data Catalog resource `apyc-v239` — direct CSV `https://data.cms.gov/provider-data/sites/default/files/resources/c4f74a440cc6ce4ed941fa3c9de2ab58_1770163654/Timely_and_Effective_Care-State.csv` (the `/api/1/datastore/query/` endpoint failed; metastore distribution URL worked)
+- **Granularity:** 56 jurisdictions × 31 process measures
+- **What it gives:** Process-of-care numeric scores (not better/same/worse buckets) for ED throughput (OP_18 median ED time, OP_22 left-without-being-seen), sepsis bundle compliance (SEP_1, severe-sepsis 3hr/6hr, septic-shock 3hr/6hr), healthcare personnel flu vaccination (IMM_3), head-CT-within-45-min for stroke (OP_23), safe use of opioids, colonoscopy follow-up (OP_29, OP_31).
+- **Distinct from** the four existing `hospital_compare_*` files which carry hospital count distributions or HCAHPS top-box, not process-measure scores.
+
+### 76. CDC NNDSS Notifiable Disease Surveillance
+- **File:** `cdc_nndss.csv` — 430,925 rows × 15 cols (47.8 MB)
+- **Years:** 2022–2024 (weekly NNDSS = 2024; Lyme aggregated = 2022–2023)
+- **Source:** Two stacked Socrata datasets on data.cdc.gov: `x9gk-5huc` (NNDSS Weekly Data 2024, 425,880 rows) + `x5j9-wybp` (Lyme aggregated 2022–2023, 5,045 rows). Distinguished by `disease_table` column.
+- **Granularity:** reporting area × MMWR week × disease
+- **What it gives:** Weekly case counts for ~115 notifiable infectious diseases plus 52-week max and YTD cumulative comparisons. Diseases include tuberculosis, hepatitis A/B/C variants, salmonellosis (Typhi, Paratyphi, other), Lyme disease (with case-status / sex / age stratifications in the aggregated table), pertussis, mumps, measles, malaria, meningococcal disease, Legionellosis, arboviral diseases (West Nile, dengue, etc.), STEC, listeriosis, vibriosis, Q fever, anthrax, botulism.
+- **Distinct from** `cdc_hiv.csv` (separate HIV surveillance system), `cdc_sti.csv` (chlamydia/gonorrhea/syphilis), `cdc_drug_overdose.csv`, and the mortality files — NNDSS measures *case incidence* of reportable infections.
+- **Reproducibility:** `scripts/fetch_cdc_nndss.py`
+
+### 77. BLS State Unemployment — Local Area Unemployment Statistics (LAUS)
+- **File:** `bls_unemployment.csv` — 3,672 rows × 5 cols (140 KB)
+- **Years:** 2020–2025 (Dec 2025 not yet published as of 2026-04; 51 nulls)
+- **Source:** **Fallback to FRED** (BLS public API rejected the LAUS series IDs without registration). FRED endpoint pattern: `https://fred.stlouisfed.org/graph/fredgraph.csv?id=<STATE>URN` (e.g. `CAURN` = California unemployment rate, monthly, not seasonally adjusted). 51 series fetched (50 states + DC).
+- **Granularity:** state × year × month
+- **Key columns:** `state`, `year`, `month`, `unemployment_rate`, `source`
+- **What it gives:** Monthly unemployment rate time series. Rate range 1.5–30.1% (Nevada April 2020 COVID-era peak validated against BLS published value).
+- **Distinct from** `bls_healthcare_wages.csv` (May 2024 OEWS wage snapshot — no time dimension, no unemployment).
+- **Reproducibility:** `scripts/fetch_bls_unemployment.py` (tries BLS API first, falls back to FRED)
+
+### 78. HRSA Nurse Corps — Loan Repayment + Scholarship
+- **File:** `hrsa_nurse_corps.csv` — 53 rows × 25 cols (10 KB)
+- **Year:** FY 2024 (data as of 2024-09-30)
+- **Source:** Combined three sources — [Nurse Corps Field Strength FY2024 XLSX](https://data.hrsa.gov/DataDownload/StaticDocuments/FY%202024%20Nurse%20Corps%20Field%20Strength.xlsx), [Scholar Pipeline FY2024 XLSX](https://data.hrsa.gov/DataDownload/StaticDocuments/FY%202024%20Nurse%20Corps%20Scholar%20Pipeline.xlsx), and Appendix C of the [FY2024 Report to Congress PDF](https://www.govinfo.gov/content/pkg/CMR-HE20_9000-00198829/pdf/CMR-HE20_9000-00198829.pdf) for facility-level LRP dollar amounts (aggregated to state).
+- **Granularity:** state (50 states + DC + PR + VI = 53)
+- **Key columns:** `state`, `fiscal_year`, `total_field_strength`, `nc_lrp_field_strength`, `nc_sp_field_strength`, `nc_lrp_dollars` (real, parsed from PDF), `nc_sp_dollars_estimated` (apportioned), `nc_total_dollars_estimated`, plus nurse-type breakdowns (RN, NP, NP-Psych, RNA, CNM, CNS, faculty), rural/non-rural, scholar-pipeline counts.
+- **Validation:** Total LRP $51.85M, total SP $25.96M, total $77.81M, 1,753 LRP + 672 SP = 2,425 field strength — match the FY2024 Report to Congress.
+- **Caveat:** SP dollars are an estimate apportioned by SP field-strength share (HRSA does not publish per-state SP $).
+
+### 79. CDC Alzheimer's Disease & Healthy Aging
+- **File:** `cdc_alzheimers.csv` — 69,859 rows × 30 cols (27.8 MB)
+- **Years:** 2015–2022 (8 years)
+- **Source:** data.cdc.gov Socrata `hfr9-rurv` — [Alzheimer's Disease and Healthy Aging Data](https://data.cdc.gov/Healthy-Aging/Alzheimer-s-Disease-and-Healthy-Aging-Data/hfr9-rurv). BRFSS-based, older-adult focused.
+- **Granularity:** 59 locations (50 states + DC + territories + HHS regions + national) × topic × age stratification
+- **Key columns:** `yearstart`/`yearend`, `locationabbr`/`locationdesc`, `class`, `topic`, `question`, `data_value` (%), CIs, `stratificationcategory1`/`stratification1` (age group), `stratificationcategory2`/`stratification2` (sex/race).
+- **Topics:** Cognitive Decline (subjective cognitive decline, functional difficulties, need for assistance, talked to provider), Caregiving (provide care, expected caregiving, duration, intensity, care for someone with cognitive impairment), Mental Health for older adults (frequent mental distress, lifetime depression diagnosis).
+- **Distinct from** `brfss_state_prevalence.csv` — the agent deliberately dropped the AD&HA "Screenings and Vaccines" class to avoid overlap; retained classes are caregiving + cognitive decline + older-adult mental health, which are not in the main BRFSS file.
+
+### 80. SAMHSA N-MHSS — National Mental Health Services Survey
+- **File:** `samhsa_nmhss.csv` — 54 rows × 65 cols (13 KB)
+- **Year:** 2023 (reference date 2023-03-31)
+- **Source:** **PUF microdata gated** (SAMHSA CDN returned 404 for all documented PUF zip URLs). Fallback: parsed the 2023 [N-SUMHSS State Profiles PDF](https://www.samhsa.gov/data/sites/default/files/reports/rpt53014/2023-nsumhss-state-profiles.pdf) (765 pages, 28 MB) — same survey, state-level aggregates.
+- **Granularity:** 50 states + DC + PR + national + territories combined = 54 jurisdictions
+- **Key columns:** Facility totals (`total_facilities`, `total_clients`, `response_rate_pct`), service settings (`facilities_24h_hospital_inpatient`, `facilities_24h_residential`, `facilities_less_than_24h_care`), **bed capacity** (`beds_hospital_inpatient`, `beds_residential`, `beds_total`, capacity columns), 11 facility-type counts (`ft_psychiatric_hospital`, `ft_cmhc`, `ft_ccbhc`, `ft_vamc`, etc.), 13 treatment approaches (`approach_cbt`, `approach_dbt`, `approach_ect`, `approach_ketamine`, `approach_emdr`, `approach_telehealth`, etc.), 14 supportive services, 8 dedicated programs, 5 payer mix counts.
+- **Validation:** State sums match national totals (9,853 vs 9,856 facilities; 88,873 vs 88,893 beds — diff = U.S. Territories row reported separately).
+- **Distinct from** `samhsa_facilities.csv` — that's the FindTreatment.gov locator (87,549 rows, includes individual buprenorphine prescribers, no bed counts). N-MHSS is a survey of formal mental health treatment facilities with bed capacity — different unit of observation.
+
+### 81. CMS Skilled Nursing Facility Quality Reporting Program (SNF QRP)
+- **File:** `cms_snf.csv` — 838,071 rows × 16 cols (175 MB)
+- **Release:** March 2026 refresh (issued Oct 2025); reporting periods Oct 2022–Mar 2025 vary by measure
+- **Source:** CMS Provider Data Catalog `fykj-qjee` — direct CSV `https://data.cms.gov/provider-data/sites/default/files/resources/22278e3bbf43d60484dc40838338b596_1773439551/Skilled_Nursing_Facility_Quality_Reporting_Program_Provider_Data_Mar2026.csv`
+- **Granularity:** facility × measure (long format) — 14,703 unique facilities (CCN) × 57 distinct measure codes × 53 states/territories
+- **Key columns:** `CMS Certification Number (CCN)`, `Provider Name`, `State`, `County/Parish`, `Measure Code`, `Score`, `Footnote`, `Start Date`, `End Date`, `LOCATION1`.
+- **Distinct from `cms_nursing_home.csv`** — that file holds rolled-up 5-star ratings + structural inputs (beds, staffing HPRD, deficiencies). This file holds the **underlying QRP measure scores the 5-stars don't expose**, including:
+  - **S_004 PPR-PD** — Risk-standardized 30-day post-discharge readmission
+  - **S_005 DTC** — Discharge to community
+  - **S_006 MSPB** — Medicare Spending Per Beneficiary ratio (NOT in 5-star file)
+  - **S_007/S_013** — Functional outcome measures
+  - **S_038/S_039 HAI** — Healthcare-associated infections requiring hospitalization
+  - **S_040–S_045** — IMPACT Act assessment-completion / transfer-of-health-information measures
+- Same facility universe (CCN joins cleanly to `cms_nursing_home.csv`); complementary content.
 
 ---
 
