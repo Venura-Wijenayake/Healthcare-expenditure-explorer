@@ -1077,19 +1077,55 @@ def retrieve_context(question: str) -> str:
 
 
 # =============================================================================
+# Size-based provider routing
+# =============================================================================
+SMALL_CONTEXT_THRESHOLD = 4000  # chars
+
+# Small contexts fit Groq's free TPM cap → try the free, fast path first.
+SMALL_CONTEXT_CHAIN = ["groq", "openai", "gemini", "together"]
+
+# Large contexts can't fit Groq without lossy trimming → spend OpenAI's
+# cheap paid tokens (gpt-4o-mini ~$0.0002/1k input) before falling back.
+# Groq is appended as last resort, where trim_context_for_provider() will
+# truncate to 4K chars.
+LARGE_CONTEXT_CHAIN = ["openai", "gemini", "together", "groq"]
+
+PROVIDER_DISPLAY = {p: PROVIDER_LABELS[p] for p in PROVIDER_LABELS}
+
+
+def _format_chain(chain: list[str]) -> str:
+    return " → ".join(PROVIDER_DISPLAY[p] for p in chain)
+
+
+# =============================================================================
 # Public entry point
 # =============================================================================
-def query_analyst(question: str) -> tuple[str, str]:
-    """Walks provider chain Groq → OpenAI → Gemini → Together; returns (response, provider_used).
+def query_analyst(question: str) -> tuple[str, str, int, str]:
+    """Walks a size-routed provider chain; returns (response, provider_used, context_chars, route_label).
 
-    Each query gets targeted context via retrieve_context(). Each provider
-    receives a context sized for its rate-limit profile via
-    trim_context_for_provider().
+    1. retrieve_context(question) builds a keyword-targeted context.
+    2. If len(context) < 4000 chars → SMALL chain (Groq first, free + fast).
+    3. If len(context) >= 4000 chars → LARGE chain (OpenAI first, full
+       context; Groq appended as last resort with trimming).
+    4. Each provider receives a context sized for its rate-limit profile via
+       trim_context_for_provider() (only Groq trims).
     """
     context = retrieve_context(question)
+    context_chars = len(context)
+
+    if context_chars < SMALL_CONTEXT_THRESHOLD:
+        chain = SMALL_CONTEXT_CHAIN
+        route_label = f"Small context ({context_chars:,} chars) · {_format_chain(chain)}"
+    else:
+        chain = LARGE_CONTEXT_CHAIN
+        route_label = (
+            f"Large context ({context_chars:,} chars) · {_format_chain(chain)} "
+            "(Groq trimmed to 4K chars if reached)"
+        )
+
     last_error: Exception | None = None
     tried = 0
-    for provider in PROVIDERS:
+    for provider in chain:
         if not _has_key(provider):
             continue
         tried += 1
@@ -1097,7 +1133,7 @@ def query_analyst(question: str) -> tuple[str, str]:
             sized_context = trim_context_for_provider(context, provider)
             response = _HANDLERS[provider](question, sized_context)
             if response and response.strip():
-                return response, provider
+                return response, provider, context_chars, route_label
         except Exception as e:
             last_error = e
             continue

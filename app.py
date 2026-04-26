@@ -895,9 +895,10 @@ with tab7:
         )
     else:
         st.caption(
-            f"Active provider: **{PROVIDER_LABELS[active]}** "
-            f"(chain: Groq → GPT-4o mini → Gemini → Together AI; each query routes to "
-            "relevant datasets via keyword retrieval)."
+            f"Default first provider: **{PROVIDER_LABELS[active]}**. "
+            "Size-based routing: small context (<4K chars) goes Groq → GPT-4o mini → Gemini "
+            "→ Together; large context skips Groq's TPM cap and goes GPT-4o mini → Gemini → "
+            "Together → Groq*. Each query routes to relevant datasets via keyword retrieval."
         )
 
     EXAMPLE_QUESTIONS = [
@@ -940,13 +941,15 @@ with tab7:
         with st.spinner("Thinking…"):
             t0 = time.time()
             try:
-                response, provider_used = query_analyst(question.strip())
+                response, provider_used, ctx_chars, route_label = query_analyst(question.strip())
                 elapsed = time.time() - t0
                 st.session_state.ai_history.insert(0, {
                     "q": question.strip(),
                     "a": response,
                     "provider": provider_used,
                     "seconds": elapsed,
+                    "ctx_chars": ctx_chars,
+                    "route": route_label,
                 })
                 st.session_state.ai_history = st.session_state.ai_history[:5]
             except RuntimeError as e:
@@ -955,11 +958,12 @@ with tab7:
     if st.session_state.ai_history:
         latest = st.session_state.ai_history[0]
         st.markdown("### Response")
+        st.info(f"📊 **Routing:** {latest.get('route', 'n/a')}")
         with st.container(border=True):
             st.markdown(latest["a"])
         st.caption(
             f"Answered by **{PROVIDER_LABELS.get(latest['provider'], latest['provider'])}** "
-            f"in {latest['seconds']:.1f}s."
+            f"in {latest['seconds']:.1f}s · context {latest.get('ctx_chars', 0):,} chars."
         )
 
         if len(st.session_state.ai_history) > 1:
@@ -970,7 +974,9 @@ with tab7:
                     st.markdown(item["a"])
                     st.caption(
                         f"{PROVIDER_LABELS.get(item['provider'], item['provider'])} · "
-                        f"{item['seconds']:.1f}s"
+                        f"{item['seconds']:.1f}s · "
+                        f"{item.get('ctx_chars', 0):,} chars · "
+                        f"{item.get('route', '').split(' · ')[0] if item.get('route') else ''}"
                     )
 
 with tab8:
