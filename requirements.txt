@@ -2,3 +2,6 @@ streamlit
 pandas
 plotly
 requests
+groq
+google-generativeai
+together

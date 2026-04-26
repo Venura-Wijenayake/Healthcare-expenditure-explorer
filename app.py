@@ -1,8 +1,15 @@
+import time
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from data_loader import fetch_part_d_data, fetch_part_b_data, load_geo_variation, load_ahrf, load_hpsa
+from ai_analyst import (
+    query_analyst,
+    build_context,
+    get_active_provider,
+    PROVIDER_LABELS,
+)
 
 st.set_page_config(
     page_title="U.S. Healthcare Expenditure Explorer",
@@ -39,13 +46,14 @@ if search_term:
     ]
 
 # Tabs
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "📊 Overview",
     "💊 Drug Analysis",
     "💰 Spending Deep Dive",
     "💉 Part B",
     "🗺️ Geography",
     "🔍 Compare States",
+    "🤖 AI Analyst",
     "📚 Data Sources",
 ])
 
@@ -872,6 +880,101 @@ with tab6:
         )
 
 with tab7:
+    st.subheader("🤖 AI Analyst")
+    st.markdown(
+        "Ask natural-language questions across the 73 federal datasets that power this dashboard. "
+        "The analyst reasons over pre-computed summaries (state risk index, Medicare spending, "
+        "Medicaid drug spending, workforce density) and returns specific, data-driven insights."
+    )
+
+    active = get_active_provider()
+    if active is None:
+        st.error(
+            "No AI provider API key is configured. Add at least one of "
+            "`GROQ_API_KEY`, `GEMINI_API_KEY`, or `TOGETHER_API_KEY` to "
+            "`.streamlit/secrets.toml` (see `secrets.toml.example`)."
+        )
+    else:
+        st.caption(
+            f"Active provider: **{PROVIDER_LABELS[active]}** "
+            f"(falls back to Gemini → Together AI if {PROVIDER_LABELS[active]} fails)."
+        )
+
+    EXAMPLE_QUESTIONS = [
+        "Which states have the highest disease burden but lowest provider supply?",
+        "Where is telehealth adoption growing fastest post-COVID?",
+        "Which states show the biggest gap between Medicare spending and health outcomes?",
+        "Where are opioid overdose rates rising despite high treatment facility density?",
+        "Which states have improved most on uninsured rates over the last decade?",
+    ]
+
+    if "ai_question_input" not in st.session_state:
+        st.session_state.ai_question_input = ""
+    if "ai_history" not in st.session_state:
+        st.session_state.ai_history = []  # list of dicts: {q, a, provider, seconds}
+
+    def _set_question(q: str):
+        st.session_state.ai_question_input = q
+
+    st.markdown("**Example questions** (click to populate):")
+    btn_cols = st.columns(2)
+    for i, eq in enumerate(EXAMPLE_QUESTIONS):
+        btn_cols[i % 2].button(
+            eq,
+            key=f"ai_example_{i}",
+            on_click=_set_question,
+            args=(eq,),
+            use_container_width=True,
+        )
+
+    question = st.text_area(
+        "Your question",
+        key="ai_question_input",
+        height=80,
+        placeholder="Ask anything about the 73 datasets…",
+    )
+
+    submit = st.button("🔍 Ask the analyst", type="primary", disabled=(active is None))
+
+    if submit and question.strip():
+        with st.spinner("Thinking…"):
+            t0 = time.time()
+            try:
+                context = build_context()
+                response, provider_used = query_analyst(question.strip(), context)
+                elapsed = time.time() - t0
+                st.session_state.ai_history.insert(0, {
+                    "q": question.strip(),
+                    "a": response,
+                    "provider": provider_used,
+                    "seconds": elapsed,
+                })
+                st.session_state.ai_history = st.session_state.ai_history[:5]
+            except RuntimeError as e:
+                st.error(str(e))
+
+    if st.session_state.ai_history:
+        latest = st.session_state.ai_history[0]
+        st.markdown("### Response")
+        with st.container(border=True):
+            st.markdown(latest["a"])
+        st.caption(
+            f"Answered by **{PROVIDER_LABELS.get(latest['provider'], latest['provider'])}** "
+            f"in {latest['seconds']:.1f}s."
+        )
+
+        if len(st.session_state.ai_history) > 1:
+            st.divider()
+            st.markdown("### Recent questions")
+            for i, item in enumerate(st.session_state.ai_history[1:], start=1):
+                with st.expander(f"{i}. {item['q']}", expanded=False):
+                    st.markdown(item["a"])
+                    st.caption(
+                        f"{PROVIDER_LABELS.get(item['provider'], item['provider'])} · "
+                        f"{item['seconds']:.1f}s"
+                    )
+
+with tab8:
     st.subheader("📚 Data Sources")
     st.markdown(
         "Every dataset that powers this dashboard, what it measures, and where it comes from. "
