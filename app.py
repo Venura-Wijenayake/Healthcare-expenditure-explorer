@@ -1084,7 +1084,7 @@ with tab8:
     year_end_max = min(int(df_sources["year_end"].max()), 2026)  # cap at present
     col_k1, col_k2, col_k3, col_k4 = st.columns(4)
     col_k1.metric("Total Datasets", f"{len(df_sources):,}")
-    col_k2.metric("Total Rows", f"{total_rows / 1e6:.1f}M")
+    col_k2.metric("Total Rows", f"~{total_rows / 1e6:.1f}M")
     col_k3.metric("Agencies", f"{df_sources['agency'].nunique()}")
     col_k4.metric("Year Span", f"{year_start_min}–{year_end_max}")
 
