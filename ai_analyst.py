@@ -94,11 +94,36 @@ def _call_together(question: str, context: str) -> str:
 
 _HANDLERS = {"groq": _call_groq, "gemini": _call_gemini, "together": _call_together}
 
+# Groq's free-tier TPM limit (6,000 tokens/minute on llama-3.3-70b-versatile)
+# is easily breached by the full ~10K-token context. Trim aggressively for
+# Groq; Gemini and Together have generous TPM/context budgets and get the
+# full prompt.
+GROQ_CONTEXT_CHAR_LIMIT = 4000
+GROQ_TRIM_NOTE = (
+    "Note: abbreviated context for rate-limit compliance. "
+    "Full context available via Gemini/Together AI."
+)
+
+
+def trim_context_for_provider(context: str, provider: str) -> str:
+    """Provider-specific context sizing.
+
+    Groq's free tier caps at ~6K tokens/minute on llama-3.3-70b-versatile, so we
+    truncate to the first 4,000 characters (~1K tokens) and prepend a note that
+    the LLM should know it's seeing an abbreviated view. Other providers get the
+    full context unchanged.
+    """
+    if provider == "groq":
+        return f"{GROQ_TRIM_NOTE}\n\n{context[:GROQ_CONTEXT_CHAR_LIMIT]}"
+    return context
+
 
 def query_analyst(question: str, context: str) -> tuple[str, str]:
     """Try each provider in priority order; return (response, provider_used).
 
     Silently falls back on any error from a provider that has a key configured.
+    Each provider receives a context sized for its own rate-limit profile via
+    trim_context_for_provider().
     Raises RuntimeError only if every available provider fails or none is configured.
     """
     last_error: Exception | None = None
@@ -108,7 +133,8 @@ def query_analyst(question: str, context: str) -> tuple[str, str]:
             continue
         tried += 1
         try:
-            response = _HANDLERS[provider](question, context)
+            sized_context = trim_context_for_provider(context, provider)
+            response = _HANDLERS[provider](question, sized_context)
             if response and response.strip():
                 return response, provider
         except Exception as e:
