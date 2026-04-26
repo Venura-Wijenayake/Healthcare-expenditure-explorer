@@ -138,7 +138,12 @@ def build_context() -> str:
         rows = risk[cols].copy()
         for c in cols[2:3] + cols[5:]:
             rows[c] = rows[c].round(1)
-        parts.append("=== STATE RISK INDEX (all 51 jurisdictions; 0–100 percentile, higher=worse) ===")
+        parts.append("=== STATE RISK INDEX (all 51 jurisdictions) ===")
+        parts.append(
+            "NOTE: All dimension scores are percentile-ranked 0-100 where HIGHER = WORSE "
+            "outcome. A dim_insurance score of 86 means 86th percentile for uninsured rate "
+            "— i.e. one of the worst states for insurance coverage, NOT one of the best."
+        )
         parts.append(rows.to_csv(index=False))
     except Exception:
         pass
