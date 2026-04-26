@@ -242,6 +242,21 @@ div[data-testid="stHorizontalBlock"] { gap: 16px; }
   text-align: center;
   margin-top: 24px;
 }
+/* Vertical-menu styling for st.radio (used in the Explore tab nav) */
+.stRadio > div { flex-direction: column; gap: 2px; }
+.stRadio > div > label {
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+  color: var(--text-secondary);
+}
+.stRadio > div > label:hover {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+.stRadio [data-testid="stMarkdownContainer"] p { font-size: 0.85rem; }
+div[role="radiogroup"] > label > div:first-child { display: none; }
 </style>
 """,
     unsafe_allow_html=True,
@@ -573,7 +588,8 @@ with st.sidebar:
         mrsa = _state_mrsa_sir().get(state_filter)
         ed_wait = _state_ed_wait().get(abbr) if abbr else None
         phys_per = _state_phys_per_100k().get(abbr) if abbr else None
-        unemp = _state_unemployment().get(state_filter)
+        # bls_unemployment.csv keys by 2-letter abbrev (AK, AL, …) — translate
+        unemp = _state_unemployment().get(abbr) if abbr else None
         hiv = _state_hiv_rate().get(state_filter)
         # Cancer table sometimes uses "District of Columbia" or "Washington DC"
         cancer = _state_cancer_incidence().get(state_filter) or \
@@ -678,21 +694,26 @@ def _detect_year_col(df_in: pd.DataFrame) -> str | None:
 
 
 def _detect_primary_numeric(df_in: pd.DataFrame) -> str | None:
-    """Pick the most informative numeric column (highest variance)."""
-    skip_patterns = ["year", "fips", "rank", "id", "code", "week", "month", "_ci"]
-    best_col, best_var = None, -1.0
+    """Pick the first numeric column that isn't an identifier or denominator.
+
+    Skips id-ish (fips, state_fips, code, id, rank, _ci), time (year, month, week),
+    and denominator-ish (population, count) columns — these aren't the metric of
+    interest for the distribution chart or top/bottom tables.
+    """
+    skip_exact = {"population", "year", "month", "fips", "state_fips",
+                  "count", "week", "rank", "risk_rank", "year_start", "year_end"}
+    skip_patterns = ["fips", "rank", "id", "code", "week", "month", "_ci",
+                     "_lower", "_upper", "population", "count"]
     for c in df_in.columns:
         if not pd.api.types.is_numeric_dtype(df_in[c]):
             continue
-        if any(p in c.lower() for p in skip_patterns):
+        lc = c.lower()
+        if lc in skip_exact:
             continue
-        try:
-            v = df_in[c].astype(float).var()
-            if pd.notna(v) and v > best_var:
-                best_var, best_col = v, c
-        except Exception:
+        if any(p in lc for p in skip_patterns):
             continue
-    return best_col
+        return c
+    return None
 
 
 # Chart-type overrides per dataset
