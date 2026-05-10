@@ -1396,10 +1396,15 @@ def _render_partd_enhanced(filtered_df: pd.DataFrame, full_df: pd.DataFrame,
     fig.update_layout(yaxis={"categoryorder": "total ascending"}, coloraxis_showscale=False)
     st.plotly_chart(fig, use_container_width=True)
 
+    # CMS publishes one Mftr_Name='Overall' aggregate row per (Brnd, Gnrc, Year)
+    # plus identical per-manufacturer rows. Filter to 'Overall' to get exactly
+    # one row per drug-period without double-counting or arbitrary first-row picks.
+    full_overall = full_df[full_df["Mftr_Name"] == "Overall"]
+
     st.divider()
     st.subheader("🔬 GLP-1 Spotlight — Ozempic & Mounjaro")
     glp1_drugs = ["Ozempic", "Mounjaro", "Trulicity", "Victoza", "Rybelsus", "Wegovy"]
-    glp1_df = full_df[full_df["Brnd_Name"].isin(glp1_drugs)].copy()
+    glp1_df = full_overall[full_overall["Brnd_Name"].isin(glp1_drugs)].copy()
     glp1_df["Spending_B"] = (glp1_df["Tot_Spndng"] / 1e9).round(2)
     if not glp1_df.empty:
         fig2 = px.bar(glp1_df, x="Year", y="Spending_B", color="Brnd_Name",
@@ -1411,23 +1416,41 @@ def _render_partd_enhanced(filtered_df: pd.DataFrame, full_df: pd.DataFrame,
 
     st.divider()
     st.subheader("🔍 Drug Comparison Tool")
-    all_drugs = sorted(filtered_df["Brnd_Name"].dropna().unique().tolist())
+    cmp_drugs = sorted(full_overall["Brnd_Name"].dropna().unique().tolist())
     selected_drugs = st.multiselect(
-        "Select drugs to compare", options=all_drugs,
-        default=["Ozempic", "Mounjaro", "Eliquis"] if all(d in all_drugs for d in ["Ozempic", "Mounjaro", "Eliquis"]) else all_drugs[:3],
-        max_selections=5, key="partd_cmp_drugs",
+        "Select drugs to compare (pick 2–5)", options=cmp_drugs,
+        default=[], max_selections=5, key="partd_cmp_drugs",
     )
-    if selected_drugs:
-        comparison_df = (
-            filtered_df[filtered_df["Brnd_Name"].isin(selected_drugs)]
-            .drop_duplicates(subset=["Brnd_Name"])
-            [["Brnd_Name", "Gnrc_Name", "Tot_Spndng", "Tot_Benes", "Avg_Spnd_Per_Bene"]].copy()
+    if len(selected_drugs) < 2:
+        st.info("Select at least 2 drugs to see the comparison chart.")
+    else:
+        cmp_long = full_overall[full_overall["Brnd_Name"].isin(selected_drugs)].copy()
+        cmp_long["Spending_B"] = cmp_long["Tot_Spndng"] / 1e9
+        fig_cmp = px.bar(
+            cmp_long.sort_values("Year"),
+            x="Year", y="Spending_B", color="Brnd_Name", barmode="group",
+            labels={"Spending_B": "Total Medicare Spending ($B)",
+                    "Brnd_Name": "Drug", "Year": "Period"},
         )
-        comparison_df["Total Spending ($B)"] = (comparison_df["Tot_Spndng"] / 1e9).round(2)
-        comparison_df["Beneficiaries (M)"] = (comparison_df["Tot_Benes"] / 1e6).round(2)
-        comparison_df["Avg/Patient ($)"] = comparison_df["Avg_Spnd_Per_Bene"].round(0).apply(lambda x: f"${x:,.0f}")
-        comparison_df = comparison_df.rename(columns={"Brnd_Name": "Brand", "Gnrc_Name": "Generic"})
-        cmp_disp = comparison_df[["Brand", "Generic", "Total Spending ($B)", "Beneficiaries (M)", "Avg/Patient ($)"]]
+        apply_dark_theme(fig_cmp)
+        st.plotly_chart(fig_cmp, use_container_width=True)
+        st.caption("2025 reflects partial year (Q1–Q2 only); the visual drop from 2024 isn't a spending decline.")
+
+        cmp_summary = (
+            cmp_long.groupby("Brnd_Name")
+            .agg(total_spending=("Tot_Spndng", "sum"),
+                 total_benes=("Tot_Benes", "sum"))
+            .reset_index()
+        )
+        cmp_summary["Total Spending ($B)"] = (cmp_summary["total_spending"] / 1e9).round(2)
+        cmp_summary["Total Beneficiaries (M)"] = (cmp_summary["total_benes"] / 1e6).round(2)
+        cmp_summary["Avg Spending / Beneficiary ($)"] = (
+            cmp_summary["total_spending"] / cmp_summary["total_benes"]
+        ).round(0).apply(lambda x: f"${x:,.0f}")
+        cmp_disp = cmp_summary.rename(columns={"Brnd_Name": "Drug"})[
+            ["Drug", "Total Spending ($B)", "Total Beneficiaries (M)",
+             "Avg Spending / Beneficiary ($)"]
+        ]
         st.dataframe(cmp_disp, use_container_width=True, hide_index=True)
         st.download_button("📥 Download Comparison",
                            data=cmp_disp.to_csv(index=False).encode("utf-8"),
