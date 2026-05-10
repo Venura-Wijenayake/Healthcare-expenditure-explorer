@@ -1545,21 +1545,21 @@ def _render_geovariation_enhanced() -> None:
     with st.spinner("Loading HRSA HPSA data..."):
         df_hpsa = load_hpsa()
     df_hpsa["HPSA Shortage"] = pd.to_numeric(df_hpsa["HPSA Shortage"], errors="coerce")
-    rollup = (df_hpsa.groupby(["State Abbreviation", "Discipline"])["HPSA Shortage"]
+    rollup = (df_hpsa.groupby(["Primary State Abbreviation", "Discipline"])["HPSA Shortage"]
               .sum().unstack(fill_value=0))
     rollup["Total"] = rollup.sum(axis=1)
     top15s = rollup.nlargest(15, "Total").drop(columns="Total").reset_index()
-    long2 = top15s.melt(id_vars="State Abbreviation", var_name="Discipline",
+    long2 = top15s.melt(id_vars="Primary State Abbreviation", var_name="Discipline",
                         value_name="Practitioners Needed")
     long2["Practitioners Needed"] = long2["Practitioners Needed"].round(0)
-    fig_s = px.bar(long2, x="State Abbreviation", y="Practitioners Needed",
+    fig_s = px.bar(long2, x="Primary State Abbreviation", y="Practitioners Needed",
                    color="Discipline", barmode="group",
                    color_discrete_map={"Primary Care": "#EF4444",
                                        "Dental": "#8B5CF6",
                                        "Mental Health": "#F59E0B"})
     apply_dark_theme(fig_s)
     fig_s.update_layout(xaxis={"categoryorder": "array",
-                               "categoryarray": top15s["State Abbreviation"].tolist()})
+                               "categoryarray": top15s["Primary State Abbreviation"].tolist()})
     st.plotly_chart(fig_s, use_container_width=True)
 
 
