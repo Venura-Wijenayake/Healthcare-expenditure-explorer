@@ -1408,7 +1408,10 @@ def _render_partd_enhanced(filtered_df: pd.DataFrame, full_df: pd.DataFrame,
     glp1_df["Spending_B"] = (glp1_df["Tot_Spndng"] / 1e9).round(2)
     if not glp1_df.empty:
         fig2 = px.bar(glp1_df, x="Year", y="Spending_B", color="Brnd_Name",
-                      barmode="group", color_discrete_sequence=PRIMARY_COLORS)
+                      barmode="group", color_discrete_sequence=PRIMARY_COLORS,
+                      labels={"Spending_B": "Total Medicare Spending ($B)",
+                              "Brnd_Name": "Drug",
+                              "Year": "Period"})
         apply_dark_theme(fig2)
         st.plotly_chart(fig2, use_container_width=True)
     else:
@@ -1458,7 +1461,7 @@ def _render_partd_enhanced(filtered_df: pd.DataFrame, full_df: pd.DataFrame,
                            mime="text/csv", key="dl_partd_cmp_v2")
 
     st.divider()
-    st.subheader("📈 Fastest Growing Drugs (Year-over-Year)")
+    st.subheader("📈 Fastest Growing Drugs (2024 → 2025 H1 annualized)")
     yoy_df = full_df.groupby(["Brnd_Name", "Year"])["Tot_Spndng"].sum().reset_index()
     pivot = yoy_df.pivot(index="Brnd_Name", columns="Year", values="Tot_Spndng").reset_index()
     pivot.columns.name = None
@@ -1467,11 +1470,14 @@ def _render_partd_enhanced(filtered_df: pd.DataFrame, full_df: pd.DataFrame,
         c0, c1y = yrs[0], yrs[1]
         pivot = pivot.dropna(subset=[c0, c1y])
         pivot = pivot[pivot[c0] >= 1e8]
+        # Annualize 2025 H1 (×2) so the growth % isn't artificially halved by
+        # comparing a full year to a half year. Revisit when 2025 fills out.
+        pivot[c1y] = pivot[c1y] * 2
         pivot["YoY_%"] = ((pivot[c1y] - pivot[c0]) / pivot[c0] * 100).round(1)
         top_growers = pivot.nlargest(10, "YoY_%")[["Brnd_Name", c0, c1y, "YoY_%"]].copy()
         top_growers[c0] = (top_growers[c0] / 1e9).round(2)
         top_growers[c1y] = (top_growers[c1y] / 1e9).round(2)
-        top_growers.columns = ["Drug", f"{c0} ($B)", f"{c1y} ($B)", "Growth %"]
+        top_growers.columns = ["Drug", f"{c0} ($B)", "2025 (H1 annualized) ($B)", "Growth %"]
         fig6 = px.bar(top_growers, x="Growth %", y="Drug", orientation="h",
                       text="Growth %", color="Growth %",
                       color_continuous_scale=[[0, "#00BFA6"], [1, "#34D399"]])
