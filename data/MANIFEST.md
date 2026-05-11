@@ -201,13 +201,30 @@ The `data/` directory is gitignored. This manifest documents every dataset, its 
 - **Granularity:** site-level
 - **What it gives:** Site identity, address, lat/lon, FQHC vs Look-Alike, status, hours, schedule, county/HHS region/congressional district. Patients-served counts live in #28.
 
-### 28. HRSA UDS — FQHC Patients Served (cleaned)
-- **File:** `hrsa_uds.csv` — 1,359 rows × 17 cols (180 KB)
-- **Year:** 2024
-- **Source:** Derived from #29 (Tables 3A/4/5 joined per awardee)
-- **Granularity:** awardee-level (one row per H80 grantee)
-- **What it gives:** State, name, address, urban/rural, total patients, M/F split (T3A), Medicaid + public-insurance counts (T4), medical/virtual/dental visits (T5).
-- **Sanity check:** 32.4M total FQHC patients served in 2024 ✓
+### 28. HRSA UDS — FQHC Health Center Profile
+- **File:** `hrsa_uds.csv` — 1,359 rows × 190 cols (1.1 MB)
+- **Year:** 2024 reporting year (UDS publishes ~9 months after each calendar year)
+- **Source:** Built from #29 (the raw H80 workbook). The fetch script left-joins five sheets — `HealthCenterInfo`, `Table4`, `Workforce`, `Table6BClinicalmeasures`, plus re-derived patient totals from `Table3A` — on the `GrantNumber` awardee key.
+- **Granularity:** awardee-level (one row per HRSA Section 330 grantee / FQHC).
+- **Schema (190 cols, grouped by purpose):**
+  - **Identity** (`HealthCenterInfo`): `BHCMISID`, `GrantNumber`, `ReportingYear`, `HealthCenterName`, address fields, `state` (HealthCenterState alias), `UrbanRuralFlag`, project director contacts.
+  - **Special-population funding flags:** `FundingCHC` (Community Health Center), `FundingMHC` (Migrant Health Center), `FundingHO` (Health Care for the Homeless), `FundingPH` (Public Housing Primary Care). Each is 1 if the FQHC receives that funding stream.
+  - **Patient demographics** — re-derived convenience columns: `TotalMalePatients`, `TotalFemalePatients`, `TotalPatients` (sum). Source: Table 3A line 39 (age "Total" row).
+  - **Income / Insurance / Special-Population counts** (`Table4`, 57 coded cols): `T4_L*_Ca/Cb` — patients by federal-poverty-level bands, insurance status (Medicaid / Medicare / Other public / Private / Uninsured), homeless / migratory-seasonal-agricultural-worker / public-housing-resident counts. Decode via the UDS Reporting Manual (see *Reproducibility* below).
+  - **Workforce composition** (`Workforce`, 67 coded cols): `Twfc_L*_Ca` — FTE counts by clinical role (family physicians, general practitioners, internists, OB/GYNs, pediatricians, other physicians; NPs by specialty; PAs; CNMs; RNs; LPNs; medical assistants; mental health staff; dental staff; vision; pharmacy; substance-use treatment staff; enabling services; admin). `Twfc_L1_Ca` is the total clinical staff FTE.
+  - **Clinical quality measures** (`Table6BClinicalmeasures`, 41 cols, readable names): % patients immunized, % with mammogram screening, % with Pap test, % with BMI-and-follow-up plan, % assessed for tobacco use, % prescribed statin therapy, etc. — full prevention-measure suite from UDS Table 6B.
+- **Excluded from this awardee-level view:**
+  - Table 3A demographic age × sex stratifications (kept totals only).
+  - Table 5 visits/users broken out by service line (medical / dental / MH / SUD / vision / enabling) — re-derive from the raw workbook (#29) if needed; the per-FQHC service-line frame requires choosing column subsets the data layer can't infer.
+  - **Table 7 Clinical Measures (race/ethnicity-stratified)** — 27 rows per FQHC (Race × Ethnicity strata). Aggregating to one row per FQHC requires analytical decisions (sum strata? use a "Total" row?) that belong in the view layer. The raw stratified data is in #29 if needed.
+  - Authorized-official columns, financial / cost tables (Table 8A), HIT info, site-list — all in #29.
+- **What it gives:** The federally-funded safety-net capacity layer. Where the underserved actually receive primary care; how many FTE staff each FQHC has by role; what % of its patients are below 100% FPL, uninsured, on Medicaid; what funding streams it participates in. Cross-cuts to `hpsa_*` shortage areas, `cms_nppes` provider directory, `ca_hcai_*` workforce supply.
+- **BHCMISID is partially missing (~22% of rows)** — for 294 of 1,359 FQHCs, HRSA's workbook encodes BHCMISID as Excel infinity (these are newer grantees that hadn't been assigned a BHCMIS ID at report time). We keep BHCMISID as a nullable float in those rows and use `GrantNumber` as the canonical join key (1:1 unique across all 1,359 FQHCs).
+- **Sanity checks**: 1,359 H80-funded FQHCs reporting; 32,387,774 total patients served nationally (matches HRSA's published 32.4M figure for 2024); CA leads with 171 FQHCs; TX/NY/OH/FL/IL/PA/MI/NC/MA round out the top 10.
+- **License:** Open public data; attribute HRSA.
+- **Refresh cadence:** Annual (HRSA UDS publishes ~9 months after the close of each calendar reporting year — e.g. 2024 data became available in late summer 2025).
+- **R2 path:** `hrsa_uds.parquet` (lakehouse-only routing).
+- **Reproducibility:** `scripts/fetch_hrsa_uds.py` reads the H80 workbook (#29) — note that `www.hrsa.gov` returns 403 to programmatic clients, so the workbook must be downloaded manually via browser from `https://www.hrsa.gov/sites/default/files/hrsa/foia/h80-2024.xlsx`. UDS column decoding lives in [HRSA's UDS Reporting Manual](https://bphc.hrsa.gov/data-reporting/uds-training-and-technical-assistance/uds-reporting-resources).
 
 ### 29. HRSA UDS H80 — Raw Awardee Workbook
 - **File:** `hrsa_uds_h80_2024.xlsx` — 23 MB, 37 sheets
@@ -646,6 +663,7 @@ The following scripts handle non-trivial fetches/parsing where a one-line wget w
 
 - `fetch_nih_funding.py` — paginated NIH RePORTER pull (52 states × 5 fiscal years), aggregates to state × institute
 - `fetch_partd_prescribers.py` — chunked stream of 582 MB CMS Part D Prescribers raw file, aggregates to state × specialty with derived ratios
+- `fetch_hrsa_uds.py` — reads the H80 workbook (#29), joins 5 sheets (`HealthCenterInfo`, `Table4`, `Workforce`, `Table6BClinicalmeasures`, plus Table3A patient totals) on `GrantNumber`, produces the per-FQHC Health Center Profile (#28). Handles HRSA's quirk of encoding ~22% of BHCMISIDs as Excel infinity.
 - `fetch_cdc_wonder_mortality.py` — paginated Socrata pulls for two NCHS weekly-deaths datasets covering 2018–2023; joins ACS population for crude rates
 - `fetch_fcc_broadband.py` — pulls FCC BDC county summary from the Esri Living Atlas mirror (FCC.gov direct downloads were unreliable)
 - `fetch_medicaid_drug.py` — CMS State Drug Utilization data, state-aggregated

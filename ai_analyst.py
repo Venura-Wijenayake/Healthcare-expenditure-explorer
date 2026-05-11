@@ -167,7 +167,8 @@ DATASET_REGISTRY: dict[str, list[str]] = {
     "influenza|flu|rsv|respiratory": ["cdc_wastewater", "cdc_vaccination"],
     "covid|coronavirus|sars": ["cdc_wastewater", "cdc_vaccination"],
     "vaccine|vaccination|immunization": ["cdc_vaccination"],
-    "workforce|physician|doctor|nurse|dentist|shortage": ["ahrf_state_national_2025", "hpsa_primary_care", "hrsa_workforce_projections", "gme_residency"],
+    "workforce|physician|doctor|nurse|dentist|shortage": ["ahrf_state_national_2025", "hpsa_primary_care", "hrsa_workforce_projections", "gme_residency", "hrsa_uds"],
+    "FQHC|federally.qualified.health.center|safety.net|community.health.center|underserved|primary.care.safety.net|\\bUDS\\b|health.center.profile": ["hrsa_uds"],
     "insurance|uninsured|coverage": ["census_sahie", "ahrq_meps", "acs_demographics"],
     "medicaid": ["cms_medicaid_drug", "census_sahie"],
     "medicare|spending|expenditure": ["geo_variation_2014_2023", "cms_inpatient_geo", "cms_physician_payments"],
@@ -236,6 +237,7 @@ DATASET_DISPLAY: dict[str, tuple[str, str, str]] = {
     "hpsa_mental_health": ("Mental Health HPSA Shortage Areas", "HRSA", "Current"),
     "hpsa_dental": ("Dental HPSA Shortage Areas", "HRSA", "Current"),
     "hrsa_mch": ("Maternal & Child Health Block Grant", "HRSA", "2022"),
+    "hrsa_uds": ("UDS — FQHC Health Center Profile", "HRSA", "2024 reporting year"),
     "hrsa_grants": ("HRSA Grant Awards", "HRSA", "2023"),
     "hrsa_telehealth": ("Telehealth Programs", "HRSA", "2023"),
     "hrsa_workforce_projections": ("Health Workforce Projections", "HRSA", "2023–2037"),
@@ -1188,6 +1190,43 @@ def _sum_cdc_nndss() -> tuple[str, str] | None:
     )
 
 
+def _sum_hrsa_uds() -> tuple[str, str] | None:
+    """Top-20 FQHCs by total patient volume.
+
+    The headline "where is safety-net capacity concentrated" view —
+    one row per FQHC with patient volume, state, urban/rural, and the
+    four HRSA special-population funding-stream flags (CHC / MHC / HO
+    / PH). Workforce FTE breakdowns are intentionally not summarized
+    here: the UDS Workforce table uses dozens of separate Twfc_L* line
+    items per role (physician / NP / PA / RN / LPN / MH / dental / ...)
+    and there's no single "total FTE" line. Downstream queries should
+    sum the specific Twfc_* columns relevant to their analysis.
+    """
+    df = pd.read_csv(DATA / "hrsa_uds.csv", low_memory=False)
+    df["TotalPatients"] = pd.to_numeric(df.get("TotalPatients"), errors="coerce")
+    keep = ["HealthCenterName", "HealthCenterCity", "state",
+            "UrbanRuralFlag", "TotalPatients",
+            "FundingCHC", "FundingMHC", "FundingHO", "FundingPH"]
+    keep = [c for c in keep if c in df.columns]
+    top = (df.dropna(subset=["TotalPatients"])
+             .sort_values("TotalPatients", ascending=False)
+             .head(20)
+             [keep]
+             .rename(columns={"TotalPatients": "patients_served"}))
+    top["patients_served"] = top["patients_served"].astype("Int64")
+    national_total = int(df["TotalPatients"].sum())
+    n_fqhc = len(df)
+    return _section(
+        f"HRSA UDS FQHC HEALTH CENTER PROFILE — TOP 20 FQHCs BY PATIENT "
+        f"VOLUME (2024 reporting year; {n_fqhc:,} H80-funded FQHCs serving "
+        f"{national_total:,} patients nationally; FundingCHC/MHC/HO/PH = "
+        "True if the FQHC participates in each HRSA special-population "
+        "funding stream — Community Health Center / Migrant Health Center / "
+        "Health Care for the Homeless / Public Housing Primary Care)",
+        top, max_rows=20,
+    )
+
+
 def _sum_bls_unemployment() -> tuple[str, str] | None:
     df = pd.read_csv(DATA / "bls_unemployment.csv")
     df["unemployment_rate"] = pd.to_numeric(df["unemployment_rate"], errors="coerce")
@@ -1364,6 +1403,7 @@ SUMMARIZERS: dict[str, Callable[[], tuple[str, str] | None]] = {
     "cdc_hai": _sum_cdc_hai,
     "cms_timely_care": _sum_cms_timely_care,
     "cdc_nndss": _sum_cdc_nndss,
+    "hrsa_uds": _sum_hrsa_uds,
     "bls_unemployment": _sum_bls_unemployment,
     "hrsa_nurse_corps": _sum_hrsa_nurse_corps,
     "cdc_alzheimers": _sum_cdc_alzheimers,
