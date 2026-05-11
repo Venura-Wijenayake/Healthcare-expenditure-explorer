@@ -347,6 +347,54 @@ def _state_risk_lookup() -> pd.DataFrame:
     return df
 
 
+# Reporting-area labels in CDC NNDSS that are not states — census-region
+# rollups, national/territory aggregates, and a couple of placeholder rows.
+# Individual U.S. territories (Puerto Rico, Guam, etc.) and "NEW YORK CITY"
+# are kept because NNDSS reports them as standalone jurisdictions.
+NNDSS_NON_STATE = {
+    "US RESIDENTS", "NON-US RESIDENTS", "US TERRITORIES", "TOTAL",
+    "Suppressed", "Unknown",
+    "NEW ENGLAND", "MIDDLE ATLANTIC", "EAST NORTH CENTRAL",
+    "WEST NORTH CENTRAL", "SOUTH ATLANTIC", "EAST SOUTH CENTRAL",
+    "WEST SOUTH CENTRAL", "MOUNTAIN", "PACIFIC",
+}
+
+
+@st.cache_data(show_spinner=False)
+def _load_nndss_weekly() -> pd.DataFrame:
+    """Weekly CDC NNDSS notifiable disease counts, states-only.
+
+    Returns a long-format frame: one row per (reporting_area, year, week,
+    disease). Non-state reporting areas (census regions, US/territory
+    aggregates, Suppressed/Unknown) and rows with no current-week case
+    count are dropped at load time so every downstream view sees clean
+    state-level surveillance data.
+    """
+    df = pd.read_csv(
+        "data/cdc_nndss.csv",
+        low_memory=False,
+        usecols=["disease_table", "reporting_area", "year", "week",
+                 "disease", "current_week_cases"],
+    )
+    df = df[df["disease_table"] == "weekly_nndss"].copy()
+    df = df.dropna(subset=["week", "disease", "reporting_area"])
+    df["current_week_cases"] = pd.to_numeric(
+        df["current_week_cases"], errors="coerce"
+    ).fillna(0)
+    df["year"] = df["year"].astype(int)
+    df["week"] = df["week"].astype(int)
+    # PR #5 NON_STATE_ROWS uses mixed case ("United States"); NNDSS labels
+    # are uppercase so we apply both filters defensively.
+    df = filter_states_only(df, col="reporting_area")
+    df = df[~df["reporting_area"].astype(str).isin(NNDSS_NON_STATE)]
+    # period_idx makes "most recent N weeks" cheap to compute regardless of
+    # year boundaries (sort + tail).
+    df["period_idx"] = df["year"] * 100 + df["week"]
+    df["period_label"] = (df["year"].astype(str) + "-W"
+                          + df["week"].astype(str).str.zfill(2))
+    return df.drop(columns=["disease_table"])
+
+
 @st.cache_data(show_spinner=False)
 def _state_medicare_pp() -> dict[str, float]:
     """Std payment per beneficiary by state, latest year, all-age."""
@@ -999,7 +1047,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 with tab1:
     view = st.radio(
         "View",
-        ["🗺️ National Risk Map", "🔍 State Comparator"],
+        ["🗺️ National Risk Map", "🔍 State Comparator", "🦠 Outbreak Watch"],
         horizontal=True,
         label_visibility="collapsed",
         key="risk_view",
@@ -1155,7 +1203,7 @@ with tab1:
             "Hospital Quality · Poverty."
         )
 
-    else:
+    elif view == "🔍 State Comparator":
         # State Comparator
         st.subheader("🔍 Compare States")
         st.markdown("Side-by-side comparison of any two states across the 7 risk dimensions.")
@@ -1258,6 +1306,199 @@ with tab1:
             if not worse and not better:
                 parts.append("No dimensions show a meaningful gap (≥5 points).")
             st.markdown(" ".join(parts))
+
+    else:
+        # Outbreak Watch — NNDSS Recent Activity (first lens slice).
+        st.subheader("🦠 Outbreak Watch — NNDSS Recent Activity")
+        st.markdown(
+            "Active surveillance from CDC NNDSS — what the system is "
+            "detecting in current notifiable disease activity."
+        )
+
+        with st.spinner("Loading CDC NNDSS weekly surveillance…"):
+            nndss = _load_nndss_weekly()
+
+        if nndss.empty:
+            st.warning("No NNDSS weekly data available.")
+        else:
+            sorted_periods = sorted(nndss["period_idx"].unique())
+            # 4w / 13w / 52w window options — NNDSS reports weekly, and
+            # these cover ~one month / one quarter / one year of activity.
+            window_options = {
+                "Last 4 weeks": 4,
+                "Last 13 weeks (quarter)": 13,
+                "Last 52 weeks (year)": 52,
+            }
+
+            f1, f2 = st.columns([1, 3])
+            window_label = f1.selectbox(
+                "Time window",
+                list(window_options.keys()),
+                index=1,
+                key="nndss_window",
+            )
+            n_weeks = window_options[window_label]
+            recent_periods = sorted_periods[-n_weeks:]
+            recent = nndss[nndss["period_idx"].isin(recent_periods)]
+            latest_label = nndss.loc[
+                nndss["period_idx"] == sorted_periods[-1], "period_label"
+            ].iloc[0]
+            f2.caption(
+                f"Window: {len(recent_periods)} most-recent NNDSS weeks "
+                f"(latest = {latest_label}). "
+                f"Non-state rows (census regions, US/territory aggregates) excluded."
+            )
+
+            # Compute defaults from the windowed data so they reflect the
+            # currently selected time period.
+            cond_totals = (recent.groupby("disease", as_index=False)
+                                ["current_week_cases"].sum()
+                                .sort_values("current_week_cases",
+                                             ascending=False))
+            cond_totals = cond_totals[cond_totals["current_week_cases"] > 0]
+            all_conditions = cond_totals["disease"].tolist()
+            default_conditions = all_conditions[:5]
+
+            state_totals = (recent.groupby("reporting_area", as_index=False)
+                                 ["current_week_cases"].sum()
+                                 .sort_values("current_week_cases",
+                                              ascending=False))
+            state_totals = state_totals[state_totals["current_week_cases"] > 0]
+            all_states = sorted(recent["reporting_area"].unique().tolist())
+            default_states = state_totals["reporting_area"].head(10).tolist()
+
+            c1, c2 = st.columns(2)
+            sel_conditions = c1.multiselect(
+                "Conditions",
+                options=all_conditions,
+                default=default_conditions,
+                key="nndss_conditions",
+                help="Defaults to the 5 highest-activity conditions in the selected window.",
+            )
+            sel_states = c2.multiselect(
+                "States",
+                options=all_states,
+                default=default_states,
+                key="nndss_states",
+                help="Defaults to the 10 states with the most cases in the selected window.",
+            )
+
+            filtered = recent[
+                recent["disease"].isin(sel_conditions)
+                & recent["reporting_area"].isin(sel_states)
+            ]
+
+            if not sel_conditions or not sel_states or filtered.empty:
+                st.info("No data matches these filters. "
+                        "Pick at least one condition and one state.")
+            else:
+                # Chart 1 — top 10 conditions in window across the selected
+                # states. We honor the state filter (so the bar reflects the
+                # geography you care about) but ignore the condition filter
+                # — otherwise it's redundant with the time series.
+                st.markdown("**Top 10 conditions by total cases in window**")
+                bar_src = (
+                    recent[recent["reporting_area"].isin(sel_states)]
+                    .groupby("disease", as_index=False)["current_week_cases"]
+                    .sum()
+                )
+                bar_src = (bar_src[bar_src["current_week_cases"] > 0]
+                           .sort_values("current_week_cases", ascending=False)
+                           .head(10))
+                if bar_src.empty:
+                    st.caption("No cases reported across the selected states "
+                               "in this window.")
+                else:
+                    fig_bar = go.Figure(go.Bar(
+                        x=bar_src["disease"],
+                        y=bar_src["current_week_cases"],
+                        marker=dict(color="#1B6FE8"),
+                        hovertemplate="<b>%{x}</b><br>%{y:,} cases<extra></extra>",
+                    ))
+                    apply_dark_theme(
+                        fig_bar,
+                        title=f"Top conditions — {window_label.lower()}",
+                    )
+                    fig_bar.update_layout(xaxis=dict(tickangle=-35),
+                                          height=420)
+                    st.plotly_chart(fig_bar, use_container_width=True)
+
+                # Chart 2 — time series per condition × state. Cap at top 5
+                # states per condition so the legend stays readable when the
+                # user has 10+ states selected.
+                st.markdown("**Cases over time — by condition & state**")
+                line_src = filtered.copy()
+                # Drop (condition, state) pairs with zero activity across the
+                # window so flat zero lines don't clutter the chart.
+                pair_totals = (line_src
+                               .groupby(["disease", "reporting_area"])
+                               ["current_week_cases"].sum())
+                active_pairs = pair_totals[pair_totals > 0].index
+                line_src = line_src.set_index(["disease", "reporting_area"])
+                line_src = line_src.loc[line_src.index.isin(active_pairs)].reset_index()
+
+                if line_src.empty:
+                    st.caption("Zero activity across the selected "
+                               "condition × state combinations.")
+                else:
+                    # Cap states per condition at top 5 by total cases.
+                    keep_rows = []
+                    for cond, cond_df in line_src.groupby("disease"):
+                        top_states_for_cond = (
+                            cond_df.groupby("reporting_area")
+                                   ["current_week_cases"].sum()
+                                   .sort_values(ascending=False)
+                                   .head(5).index.tolist()
+                        )
+                        keep_rows.append(
+                            cond_df[cond_df["reporting_area"].isin(top_states_for_cond)]
+                        )
+                    line_src = pd.concat(keep_rows, ignore_index=True)
+                    line_src = line_src.sort_values("period_idx")
+                    line_src["series"] = (line_src["disease"] + " · "
+                                          + line_src["reporting_area"])
+                    fig_line = px.line(
+                        line_src,
+                        x="period_label",
+                        y="current_week_cases",
+                        color="series",
+                        markers=True,
+                        color_discrete_sequence=PRIMARY_COLORS,
+                    )
+                    apply_dark_theme(fig_line, title="Weekly case counts")
+                    fig_line.update_layout(
+                        height=500,
+                        xaxis=dict(tickangle=-45, title=""),
+                        yaxis=dict(title="Cases"),
+                        legend=dict(title=""),
+                    )
+                    st.plotly_chart(fig_line, use_container_width=True)
+
+                # Filtered records table + CSV download.
+                st.markdown("**Filtered NNDSS records**")
+                table = (filtered[["disease", "reporting_area",
+                                   "period_label", "current_week_cases"]]
+                         .rename(columns={
+                             "disease": "Condition",
+                             "reporting_area": "State",
+                             "period_label": "Period",
+                             "current_week_cases": "Cases",
+                         })
+                         .sort_values(["Condition", "State", "Period"]))
+                st.dataframe(table, use_container_width=True, hide_index=True)
+                st.download_button(
+                    "📥 Download filtered NNDSS data as CSV",
+                    data=table.to_csv(index=False).encode("utf-8"),
+                    file_name=f"nndss_recent_{n_weeks}w.csv",
+                    mime="text/csv",
+                    key="dl_nndss_outbreak_watch",
+                )
+
+            st.caption(
+                "Data source: CDC National Notifiable Diseases Surveillance "
+                "System (NNDSS), weekly tables · Coverage: "
+                f"{nndss['year'].min()}–{nndss['year'].max()}"
+            )
 
 
 # ======================================================================
