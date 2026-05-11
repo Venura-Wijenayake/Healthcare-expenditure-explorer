@@ -109,6 +109,7 @@ DATASET_METADATA: dict[str, dict] = {
     "cms_physician_payments":        {"name": "CMS Physician Open Payments",                 "agency": "CMS",       "category": "Spending"},
     "cdc_vaccination":               {"name": "CDC Vaccination Coverage",                    "agency": "CDC",       "category": "Prevention"},
     "geo_variation_2014_2023":       {"name": "CMS Geographic Variation 2014-2023",          "agency": "CMS",       "category": "Spending"},
+    "cms_nppes":                     {"name": "CMS NPPES Provider Directory",                "agency": "CMS",       "category": "Workforce"},
 }
 
 

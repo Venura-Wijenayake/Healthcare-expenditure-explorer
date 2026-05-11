@@ -638,6 +638,36 @@ The `data/` directory is gitignored. This manifest documents every dataset, its 
   - **S_040–S_045** — IMPACT Act assessment-completion / transfer-of-health-information measures
 - Same facility universe (CCN joins cleanly to `cms_nursing_home.csv`); complementary content.
 
+### 85. CMS NPPES — National Plan and Provider Enumeration System (NPI Directory)
+- **File (R2-only):** `cms_nppes.parquet` — 9,494,438 rows × 23 cols (~342 MB ZSTD parquet, from an 11.4 GB raw CSV; no local CSV committed under `data/`).
+- **Snapshot:** April 2026 monthly full-replacement file (`NPPES_Data_Dissemination_April_2026_V2.zip`, V2 format — V1 deprecated March 3, 2026).
+- **Source:** [CMS NPPES Data Dissemination](https://download.cms.gov/nppes/NPI_Files.html). The fetch script scrapes the index page and downloads the most recent monthly V2 zip.
+- **Granularity:** one row per NPI (individual provider OR organization). Includes both **active and deactivated** records — FOIA-disclosed scope.
+- **Schema (23 cols, reduced from the 330-col source):**
+  - **Identifiers:** `npi` (10-digit, primary key), `entity_type_code` (1 = Individual, 2 = Organization, blank for legacy unspecified records).
+  - **Dates:** `enumeration_date` (NPI issuance), `last_update_date`, `deactivation_date` (null = active), `reactivation_date`.
+  - **Individual name:** `provider_last_name`, `provider_first_name`, `provider_middle_name`, `provider_credential_text` (e.g. "MD", "DDS", "RN").
+  - **Organization name:** `provider_organization_name`, `provider_other_organization_name`.
+  - **Practice location:** `practice_address_line1`, `practice_city`, `practice_state` (2-letter, e.g. "CA"), `practice_postal_code`, `practice_country_code`. **Practice address, not mailing address** — mailing columns were intentionally dropped.
+  - **Primary taxonomy (specialty):** `taxonomy_code` (NUCC code — see https://taxonomy.nucc.org for the lookup; a separate ingestion will load that reference table), `taxonomy_primary_switch` (Y/N flag on whether this is the provider's self-declared primary), `license_number`, `license_state_code`.
+  - **Other:** `provider_sex_code` (individuals only — NPPES header label, often called "Gender Code" in CMS documentation), `is_sole_proprietor`.
+- **Excluded** from this v1 (could be separate ingestions):
+  - Secondary taxonomies (`Healthcare Provider Taxonomy Code_2` through `_15`).
+  - Mailing-address columns (we kept practice location only).
+  - Authorized-official columns (organizational records, not useful for workforce supply).
+  - 50 "Other Provider Identifier" slots (very sparse).
+  - Supplementary reference files in the zip (`othername_pfile`, `pl_pfile` practice locations, `endpoint_pfile`) — separate ingestions if needed.
+- **What it gives:** The canonical national provider directory and the universal key (NPI) for joining to claims (Part B / Part D prescribers / Open Payments), quality (Hospital Compare CCN-linked via NPPES org records), and HRSA workforce datasets. Foundational for Workforce Atlas and Accountability views.
+- **Caveats:**
+  - **Directory only — not quality/performance data.** NPPES says who/where; it doesn't say whether they're any good. Pair with `cms_physician_payments`, `hospital_compare_*`, or specialty-specific quality datasets for that.
+  - **Sex/gender coding** uses the literal CMS header `Provider Sex Code` (values "M", "F", or blank for organizations / unspecified). Downstream views that surface this should label it carefully.
+  - **NUCC taxonomy codes are raw** — the human-readable specialty names require a separate NUCC reference table. Storing codes (not names) avoids re-extraction when NUCC revises labels.
+  - **Active vs deactivated:** ~96% of rows are active (no `deactivation_date`). Deactivated rows are kept because they're FOIA-disclosed and useful for retrospective accountability lookups (e.g. an NPI that filed claims and was later deactivated).
+- **License:** FOIA-disclosed public data; attribute CMS.
+- **Refresh cadence:** Monthly — CMS re-issues the full file on/near the 2nd Monday each month. Re-run `scripts/fetch_cms_nppes.py` after each release.
+- **R2 path:** `cms_nppes.parquet`. **R2-only** — there is no local CSV under `data/`; the schema-reduced parquet is the canonical artifact.
+- **Reproducibility:** `scripts/fetch_cms_nppes.py` — scrapes the NPI index, stream-downloads the ~1.1 GB zip, extracts the 11 GB main CSV, uses DuckDB `COPY ... TO ... (FORMAT PARQUET)` to stream-project ~20 of 330 columns into ZSTD parquet (peak memory bounded by DuckDB's vector buffer, not the full file), uploads to R2, and upserts the registry. Cleans up the raw CSV by default to reclaim disk.
+
 ---
 
 ## Reproducibility scripts (in `scripts/`)
@@ -646,6 +676,7 @@ The following scripts handle non-trivial fetches/parsing where a one-line wget w
 
 - `fetch_nih_funding.py` — paginated NIH RePORTER pull (52 states × 5 fiscal years), aggregates to state × institute
 - `fetch_partd_prescribers.py` — chunked stream of 582 MB CMS Part D Prescribers raw file, aggregates to state × specialty with derived ratios
+- `fetch_cms_nppes.py` — scrapes the CMS NPPES index, stream-downloads the monthly V2 zip (~1.1 GB), DuckDB-projects ~20 of 330 columns from the 11 GB raw CSV directly into ZSTD parquet, uploads to R2 — bypasses the local-CSV path entirely. Largest single ingestion in the lakehouse.
 - `fetch_cdc_wonder_mortality.py` — paginated Socrata pulls for two NCHS weekly-deaths datasets covering 2018–2023; joins ACS population for crude rates
 - `fetch_fcc_broadband.py` — pulls FCC BDC county summary from the Esri Living Atlas mirror (FCC.gov direct downloads were unreliable)
 - `fetch_medicaid_drug.py` — CMS State Drug Utilization data, state-aggregated

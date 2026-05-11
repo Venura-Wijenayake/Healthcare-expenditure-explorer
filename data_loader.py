@@ -81,6 +81,8 @@ def load_dataset(
     state: Any = None,
     year: Any = None,
     county: Any = None,
+    npi: Any = None,
+    taxonomy_code: Any = None,
     metric_name: Any = None,
     long_format: bool = False,
     csv_fallback: str | os.PathLike | None = None,
@@ -93,6 +95,7 @@ def load_dataset(
     remote path fails.
     """
     filters = {"state": state, "year": year, "county": county,
+               "npi": npi, "taxonomy_code": taxonomy_code,
                "metric_name": metric_name}
 
     reg = _lookup_storage(dataset_key)

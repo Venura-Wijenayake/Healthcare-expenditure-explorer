@@ -25,9 +25,12 @@ _init_failed = False
 # Logical filter name -> candidate parquet column names. Pre-melt CSVs
 # don't have a stable convention; this list covers the common spellings.
 _FILTER_COLUMNS: dict[str, list[str]] = {
-    "state": ["state", "State", "STATE", "state_name", "state_abbr", "locationabbr"],
+    "state": ["state", "State", "STATE", "state_name", "state_abbr",
+              "locationabbr", "practice_state"],
     "year":  ["year", "Year", "YEAR"],
     "county": ["county", "County", "COUNTY", "county_name"],
+    "npi":   ["npi", "NPI"],
+    "taxonomy_code": ["taxonomy_code"],
 }
 
 

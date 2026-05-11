@@ -167,7 +167,8 @@ DATASET_REGISTRY: dict[str, list[str]] = {
     "influenza|flu|rsv|respiratory": ["cdc_wastewater", "cdc_vaccination"],
     "covid|coronavirus|sars": ["cdc_wastewater", "cdc_vaccination"],
     "vaccine|vaccination|immunization": ["cdc_vaccination"],
-    "workforce|physician|doctor|nurse|dentist|shortage": ["ahrf_state_national_2025", "hpsa_primary_care", "hrsa_workforce_projections", "gme_residency"],
+    "workforce|physician|doctor|nurse|dentist|shortage": ["ahrf_state_national_2025", "hpsa_primary_care", "hrsa_workforce_projections", "gme_residency", "cms_nppes"],
+    "provider|NPI|specialty|taxonomy|practitioner|healthcare.workforce|provider.directory": ["cms_nppes"],
     "insurance|uninsured|coverage": ["census_sahie", "ahrq_meps", "acs_demographics"],
     "medicaid": ["cms_medicaid_drug", "census_sahie"],
     "medicare|spending|expenditure": ["geo_variation_2014_2023", "cms_inpatient_geo", "cms_physician_payments"],
@@ -219,6 +220,7 @@ DATASET_DISPLAY: dict[str, tuple[str, str, str]] = {
     "cms_physician_payments": ("Medicare Physician & Other Practitioners", "CMS", "2021–2023"),
     "cms_medicaid_drug": ("Medicaid Drug Spending", "CMS", "2019–2024"),
     "cms_nursing_home": ("Nursing Home Compare", "CMS", "Current"),
+    "cms_nppes": ("NPPES Provider Directory (NPI)", "CMS", "Apr 2026 monthly · refreshed monthly"),
     "cms_hospice": ("Hospice Compare", "CMS", "Current"),
     "cms_dialysis": ("Dialysis Facility Compare", "CMS", "Current"),
     "cms_chronic_conditions": ("Medicare Chronic Conditions", "CMS", "2021"),
@@ -1188,6 +1190,77 @@ def _sum_cdc_nndss() -> tuple[str, str] | None:
     )
 
 
+def _sum_cms_nppes() -> tuple[str, str] | None:
+    """Entity-type split + top-20 primary taxonomies for NPPES.
+
+    NPPES is too large for pandas (~9.5M rows, R2-only) so we query the
+    parquet directly via DuckDB and emit pre-aggregated counts. The
+    NUCC taxonomy code is stored raw; the human-readable specialty
+    label is left to a future lookup table (separate ingestion).
+    """
+    try:
+        from _r2_loader import get_duckdb, r2_bucket
+    except Exception:  # noqa: BLE001
+        return None
+    con = get_duckdb()
+    bucket = r2_bucket()
+    if con is None or not bucket:
+        return None
+    uri = f"r2://{bucket}/cms_nppes.parquet"
+    try:
+        total = con.execute(
+            "SELECT COUNT(*) FROM read_parquet(?)", [uri]
+        ).fetchone()[0]
+        # Build the breakdown frame: entity-type split followed by the
+        # top-20 primary-taxonomy rows. One CSV blob, two sections.
+        entity = con.execute("""
+            SELECT
+              CASE entity_type_code WHEN '1' THEN 'Individual (1)'
+                                    WHEN '2' THEN 'Organization (2)'
+                                    ELSE 'Unspecified' END AS section_label,
+              COUNT(*) AS providers
+            FROM read_parquet(?)
+            GROUP BY 1
+            ORDER BY providers DESC
+        """, [uri]).fetch_df()
+        active = con.execute("""
+            SELECT
+              CASE WHEN deactivation_date IS NULL OR deactivation_date='' THEN 'Active'
+                   ELSE 'Deactivated' END AS section_label,
+              COUNT(*) AS providers
+            FROM read_parquet(?)
+            GROUP BY 1
+            ORDER BY providers DESC
+        """, [uri]).fetch_df()
+        taxonomies = con.execute("""
+            SELECT taxonomy_code AS section_label, COUNT(*) AS providers
+            FROM read_parquet(?)
+            WHERE taxonomy_code IS NOT NULL AND taxonomy_code != ''
+            GROUP BY 1 ORDER BY providers DESC LIMIT 20
+        """, [uri]).fetch_df()
+        states = con.execute("""
+            SELECT practice_state AS section_label, COUNT(*) AS providers
+            FROM read_parquet(?)
+            WHERE practice_state IS NOT NULL AND practice_state != ''
+            GROUP BY 1 ORDER BY providers DESC LIMIT 10
+        """, [uri]).fetch_df()
+    except Exception:  # noqa: BLE001
+        return None
+
+    entity["section"] = "By Entity Type"
+    active["section"] = "By Status"
+    states["section"] = "Top 10 States (practice location)"
+    taxonomies["section"] = "Top 20 Primary Taxonomies (NUCC code; see https://taxonomy.nucc.org)"
+    combined = pd.concat([entity, active, states, taxonomies], ignore_index=True)
+    combined = combined[["section", "section_label", "providers"]]
+    return _section(
+        f"CMS NPPES PROVIDER DIRECTORY (total {int(total):,} providers; April 2026 "
+        "monthly file; FOIA-disclosed national NPI registry — directory only, "
+        "not provider quality/performance)",
+        combined, max_rows=60,
+    )
+
+
 def _sum_bls_unemployment() -> tuple[str, str] | None:
     df = pd.read_csv(DATA / "bls_unemployment.csv")
     df["unemployment_rate"] = pd.to_numeric(df["unemployment_rate"], errors="coerce")
@@ -1364,6 +1437,7 @@ SUMMARIZERS: dict[str, Callable[[], tuple[str, str] | None]] = {
     "cdc_hai": _sum_cdc_hai,
     "cms_timely_care": _sum_cms_timely_care,
     "cdc_nndss": _sum_cdc_nndss,
+    "cms_nppes": _sum_cms_nppes,
     "bls_unemployment": _sum_bls_unemployment,
     "hrsa_nurse_corps": _sum_hrsa_nurse_corps,
     "cdc_alzheimers": _sum_cdc_alzheimers,
