@@ -182,6 +182,7 @@ DATASET_REGISTRY: dict[str, list[str]] = {
     "dialysis|kidney|esrd|renal": ["cms_dialysis", "cms_chronic_conditions"],
     "aging|elderly|older adults|senior": ["aoa_aging_services", "cms_nursing_home"],
     "environmental|pollution|air quality|lead": ["epa_ejscreen", "cdc_lead_exposure"],
+    "vulnerability|svi|social.determinants|vulnerable.populations|social.vulnerab": ["cdc_svi_tract"],
     "diabetes|obesity|hypertension|chronic": ["brfss_state_prevalence", "cms_chronic_conditions", "cdc_nhanes"],
     "ehr|electronic health|health it|interoperability": ["onc_ehr_adoption"],
     "aco|accountable care|value based": ["cms_aco", "cms_innovation"],
@@ -259,6 +260,7 @@ DATASET_DISPLAY: dict[str, tuple[str, str, str]] = {
     "cdc_hai": ("Healthcare-Associated Infections (NHSN)", "CDC", "2024"),
     "cdc_nndss": ("Notifiable Disease Surveillance (NNDSS)", "CDC", "2023–2024"),
     "cdc_alzheimers": ("Alzheimer's Disease & Healthy Aging", "CDC", "2022"),
+    "cdc_svi_tract": ("Social Vulnerability Index — tract-level", "CDC/ATSDR", "2022"),
     "brfss_state_prevalence": ("BRFSS Behavioral Risk Factors", "CDC", "2021–2023"),
     "nimh_mental_health": ("Mental Health Statistics", "NIMH", "2021"),
     "nci_cancer": ("Cancer Incidence & Mortality (SEER)", "NCI/CDC", "2022–2023"),
@@ -1253,6 +1255,41 @@ def _sum_cdc_alzheimers() -> tuple[str, str] | None:
     )
 
 
+def _sum_cdc_svi_tract() -> tuple[str, str] | None:
+    """Top-20 most-vulnerable U.S. census tracts by overall SVI percentile.
+
+    Returns a compact identifier-plus-themes view for the AI analyst — the
+    full 158-column tract file is too wide for direct LLM context. Each row
+    is a single tract with its state/county labels, overall rank
+    (RPL_THEMES, 0-1 where 1 = most vulnerable nationally), the four
+    sub-theme ranks, and the total flag count F_TOTAL (count of 16
+    underlying variables in the worst-90th-percentile).
+    """
+    df = pd.read_csv(
+        DATA / "cdc_svi_tract.csv", low_memory=False,
+        usecols=["FIPS", "STATE", "ST_ABBR", "COUNTY", "LOCATION",
+                 "E_TOTPOP", "RPL_THEMES", "RPL_THEME1", "RPL_THEME2",
+                 "RPL_THEME3", "RPL_THEME4", "F_TOTAL"],
+    )
+    df["RPL_THEMES"] = pd.to_numeric(df["RPL_THEMES"], errors="coerce")
+    # SVI uses -999 as a missing-data sentinel for zero-population tracts.
+    df = df[df["RPL_THEMES"] >= 0]
+    df = df.sort_values("RPL_THEMES", ascending=False).head(20)
+    for c in ("RPL_THEMES", "RPL_THEME1", "RPL_THEME2",
+              "RPL_THEME3", "RPL_THEME4"):
+        df[c] = pd.to_numeric(df[c], errors="coerce").round(3)
+    df["E_TOTPOP"] = pd.to_numeric(df["E_TOTPOP"], errors="coerce").astype("Int64")
+    df["F_TOTAL"] = pd.to_numeric(df["F_TOTAL"], errors="coerce").astype("Int64")
+    return _section(
+        "CDC/ATSDR SOCIAL VULNERABILITY INDEX 2022 — TOP 20 MOST-VULNERABLE "
+        "U.S. CENSUS TRACTS (RPL_THEMES = overall national percentile, 1.0 = "
+        "most vulnerable; sub-themes: 1=socioeconomic, 2=household, 3=racial/"
+        "ethnic minority, 4=housing/transport; F_TOTAL = count of 16 underlying "
+        "variables in the worst-90th-percentile)",
+        df, max_rows=20,
+    )
+
+
 def _sum_samhsa_nmhss() -> tuple[str, str] | None:
     df = pd.read_csv(
         DATA / "samhsa_nmhss.csv",
@@ -1367,6 +1404,7 @@ SUMMARIZERS: dict[str, Callable[[], tuple[str, str] | None]] = {
     "bls_unemployment": _sum_bls_unemployment,
     "hrsa_nurse_corps": _sum_hrsa_nurse_corps,
     "cdc_alzheimers": _sum_cdc_alzheimers,
+    "cdc_svi_tract": _sum_cdc_svi_tract,
     "samhsa_nmhss": _sum_samhsa_nmhss,
     "cms_snf": _sum_cms_snf,
 }

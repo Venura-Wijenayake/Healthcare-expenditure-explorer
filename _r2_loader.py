@@ -25,9 +25,15 @@ _init_failed = False
 # Logical filter name -> candidate parquet column names. Pre-melt CSVs
 # don't have a stable convention; this list covers the common spellings.
 _FILTER_COLUMNS: dict[str, list[str]] = {
-    "state": ["state", "State", "STATE", "state_name", "state_abbr", "locationabbr"],
+    # Callers pass state abbreviations ("CA", "TX") so abbreviation columns
+    # must resolve ahead of full-name columns when a dataset carries both
+    # (e.g. SVI ships STATE='California' alongside ST_ABBR='CA'). The
+    # lowercase short form is the dominant convention in this codebase.
+    "state": ["state", "state_abbr", "ST_ABBR", "locationabbr",
+              "State", "STATE", "state_name"],
     "year":  ["year", "Year", "YEAR"],
     "county": ["county", "County", "COUNTY", "county_name"],
+    "fips":   ["FIPS", "fips", "GEOID", "geoid"],
 }
 
 

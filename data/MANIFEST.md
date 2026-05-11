@@ -638,6 +638,27 @@ The `data/` directory is gitignored. This manifest documents every dataset, its 
   - **S_040–S_045** — IMPACT Act assessment-completion / transfer-of-health-information measures
 - Same facility universe (CCN joins cleanly to `cms_nursing_home.csv`); complementary content.
 
+### 83. CDC/ATSDR Social Vulnerability Index 2022 — tract level
+- **File:** `cdc_svi_tract.csv` — 84,120 rows × 158 cols (61 MB)
+- **Year:** 2022 (latest available; SVI is on a biennial cadence — next release expected ~late 2026)
+- **Source:** CDC/ATSDR Geospatial Research, Analysis & Services Program (GRASP). Portal: [SVI Data & Tools Download](https://svi.cdc.gov/dataDownloads/data-download.html). Direct CSV (constructed from the portal's `loadXML.js`): `https://svi.cdc.gov/Documents/Data/2022/csv/states/SVI_2022_US.csv` (the U.S.-database file — tracts ranked nationally, vs. state-database files that rank tracts only within their state).
+- **Granularity:** U.S. census tract (one row per tract; 84,120 tracts across 50 states + DC; FIPS unique; 778 zero-population tracts carry -999 sentinel in ranking columns).
+- **Schema highlights** (full dictionary in the [SVI 2022 Documentation PDF](https://svi.cdc.gov/map25/data/docs/SVI2022Documentation_ZCTA.pdf)):
+  - **Identifiers:** `FIPS` (11-char tract GEOID), `ST` / `STATE` / `ST_ABBR`, `STCNTY`, `COUNTY`, `LOCATION`, `AREA_SQMI`.
+  - **`E_*` (estimates)** of underlying ACS variables (e.g. `E_TOTPOP`, `E_POV150`, `E_UNEMP`).
+  - **`EP_*` (percentages)** of those estimates.
+  - **`EPL_*` (percentile rankings, 0-1)** per variable, higher = more vulnerable.
+  - **`SPL_THEMES`** summed theme scores; **`RPL_THEME1`–`RPL_THEME4`** ranked percentile per theme.
+  - **`RPL_THEMES`** overall vulnerability percentile rank (the headline metric, 0-1).
+  - **`F_*`** per-variable flag (1 if variable ≥ 90th percentile); **`F_TOTAL`** composite count of flags per tract.
+  - **Themes:** 1 = Socioeconomic Status, 2 = Household Characteristics, 3 = Racial & Ethnic Minority Status, 4 = Housing Type & Transportation.
+- **What it gives:** Per-tract national-percentile rank of social vulnerability across 16 ACS-derived factors. Powers "who is most exposed if an outbreak hits" overlays for Outbreak Watch and the population-vulnerability axis for the future Workforce Atlas. Cross-cuts to provider-shortage and chronic-disease views.
+- **Distinct from** `cdc_svi.csv` (#47, the **county-level** 3,144-row SVI rollup also from CDC/ATSDR 2022) — same source, more granular geography. Cross-cuts to `census_sahie.csv` (insurance), `census_saipe.csv` (income/poverty), `epa_ejscreen.csv` (environmental burden).
+- **License:** Open public data; attribute CDC/ATSDR.
+- **Refresh cadence:** Biennial (next release ~late 2026; tract universe will re-base on the next ACS 5-year window).
+- **R2 path:** `cdc_svi_tract.parquet` (lakehouse-only routing).
+- **Reproducibility:** `scripts/fetch_cdc_svi.py`
+
 ---
 
 ## Reproducibility scripts (in `scripts/`)
@@ -647,6 +668,7 @@ The following scripts handle non-trivial fetches/parsing where a one-line wget w
 - `fetch_nih_funding.py` — paginated NIH RePORTER pull (52 states × 5 fiscal years), aggregates to state × institute
 - `fetch_partd_prescribers.py` — chunked stream of 582 MB CMS Part D Prescribers raw file, aggregates to state × specialty with derived ratios
 - `fetch_cdc_wonder_mortality.py` — paginated Socrata pulls for two NCHS weekly-deaths datasets covering 2018–2023; joins ACS population for crude rates
+- `fetch_cdc_svi.py` — direct CSV pull of the 2022 SVI U.S.-database tract-level file (all 158 columns retained); validates row count + FIPS uniqueness + RPL_THEMES range
 - `fetch_fcc_broadband.py` — pulls FCC BDC county summary from the Esri Living Atlas mirror (FCC.gov direct downloads were unreliable)
 - `fetch_medicaid_drug.py` — CMS State Drug Utilization data, state-aggregated
 - `aggregate_ejscreen.py` — rolls EJScreen block-group data up to county
