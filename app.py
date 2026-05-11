@@ -657,6 +657,30 @@ LOWER_IS_BETTER = {
     "vaccination": False,
 }
 
+# Aggregate / non-state row labels that appear inside state columns of several
+# federal datasets. Filtering these out keeps per-state bar charts and Top-N
+# rankings honest (the US row is ~10× any state and dominates the y-axis;
+# summing-with-US double-counts KPI totals).
+NON_STATE_ROWS = {
+    "United States", "UNITED STATES", "U.S. Territories", "US",
+    "National", "NATIONAL",
+}
+
+
+def filter_states_only(df: pd.DataFrame, col: str | None = None) -> pd.DataFrame:
+    """Return df with US-aggregate / non-state rows removed.
+
+    `col` defaults to whatever `_detect_state_col` finds; pass an explicit name
+    if the caller already knows it.
+    """
+    if df is None or df.empty:
+        return df
+    if col is None:
+        col = _detect_state_col(df)
+    if not col or col not in df.columns:
+        return df
+    return df[~df[col].astype(str).isin(NON_STATE_ROWS)]
+
 
 def _is_lower_better(col: str) -> bool:
     """Best-effort lookup against LOWER_IS_BETTER patterns."""
@@ -833,7 +857,23 @@ def render_dataset_view(dataset_key: str, state_filter: str | None,
         st.error(f"Failed to parse {dataset_key} CSV: {e}")
         return
 
-    # A) Key metrics row
+    # Split the US-aggregate row off so it never lands in state-comparison
+    # charts or rankings. `data` stays unfiltered (used by the Raw data table
+    # so the US row is still visible to users who want it). The "U.S.
+    # Territories" row is excluded from states_data but is NOT a national
+    # total — only true US-aggregate labels feed the Total KPI.
+    state_col = _detect_state_col(data)
+    states_data = filter_states_only(data, state_col) if state_col else data
+    _us_aggregate_labels = {"United States", "UNITED STATES", "US",
+                            "National", "NATIONAL"}
+    us_row = (data[data[state_col].astype(str).isin(_us_aggregate_labels)]
+              if state_col and state_col in data.columns else pd.DataFrame())
+
+    # A) Key metrics row — pull totals from the US row when the dataset
+    # carries one; otherwise sum the per-state rows. Rate-like columns always
+    # use a state-level mean (a US-row "rate" is already a national average,
+    # but mixing it into a mean-of-states would weight the nation as one
+    # extra state).
     numeric_cols = [c for c in data.select_dtypes(include="number").columns
                     if not c.lower().endswith(("_ci", "_lower", "_upper"))
                     and c.lower() not in ("year", "fips", "month", "week",
@@ -842,16 +882,25 @@ def render_dataset_view(dataset_key: str, state_filter: str | None,
         cols = st.columns(min(4, len(numeric_cols)))
         for i, col_name in enumerate(numeric_cols[:4]):
             try:
-                series = data[col_name].dropna()
-                if series.empty:
-                    continue
-                # Use mean for rates/percentages, sum for counts
-                if any(p in col_name.lower() for p in ("rate", "pct", "percent",
-                                                        "score", "sir", "ratio")):
+                is_rate = any(p in col_name.lower() for p in (
+                    "rate", "pct", "percent", "score", "sir", "ratio"))
+                if is_rate:
+                    series = states_data[col_name].dropna()
+                    if series.empty:
+                        continue
                     val = series.mean()
                     suffix = " avg"
                 else:
-                    val = series.sum()
+                    if not us_row.empty and col_name in us_row.columns:
+                        us_series = us_row[col_name].dropna()
+                        if us_series.empty:
+                            continue
+                        val = us_series.iloc[0] if len(us_series) == 1 else us_series.sum()
+                    else:
+                        series = states_data[col_name].dropna()
+                        if series.empty:
+                            continue
+                        val = series.sum()
                     suffix = " total"
                 if abs(val) >= 1e9:
                     disp = f"{val/1e9:.1f}B"
@@ -866,12 +915,11 @@ def render_dataset_view(dataset_key: str, state_filter: str | None,
                 continue
 
     primary = _detect_primary_numeric(data)
-    state_col = _detect_state_col(data)
 
-    # B) Top / Bottom 10
+    # B) Top / Bottom 10 — states only.
     if state_col and primary:
         try:
-            grouped = (data.groupby(state_col, as_index=False)[primary].mean()
+            grouped = (states_data.groupby(state_col, as_index=False)[primary].mean()
                           .dropna(subset=[primary]))
             lib = _is_lower_better(primary)
             t1, t2 = st.columns(2)
@@ -888,14 +936,14 @@ def render_dataset_view(dataset_key: str, state_filter: str | None,
         except Exception:
             pass
 
-    # C/D) Distribution chart with state highlight
+    # C/D) Distribution chart with state highlight — states only.
     if state_col and primary:
         try:
-            grouped = data.groupby(state_col, as_index=False)[primary].mean()
+            grouped = states_data.groupby(state_col, as_index=False)[primary].mean()
             render_chart_for_dataset(dataset_key, grouped, primary, state_filter)
         except Exception:
             try:
-                render_chart_for_dataset(dataset_key, data, primary, state_filter)
+                render_chart_for_dataset(dataset_key, states_data, primary, state_filter)
             except Exception:
                 pass
 
