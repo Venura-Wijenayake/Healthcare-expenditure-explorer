@@ -1461,23 +1461,34 @@ def _render_partd_enhanced(filtered_df: pd.DataFrame, full_df: pd.DataFrame,
                            mime="text/csv", key="dl_partd_cmp_v2")
 
     st.divider()
-    st.subheader("📈 Fastest Growing Drugs (2024 → 2025 H1 annualized)")
-    yoy_df = full_df.groupby(["Brnd_Name", "Year"])["Tot_Spndng"].sum().reset_index()
-    pivot = yoy_df.pivot(index="Brnd_Name", columns="Year", values="Tot_Spndng").reset_index()
-    pivot.columns.name = None
-    yrs = sorted(full_df["Year"].unique().tolist())
+    yrs = sorted(full_overall["Year"].unique().tolist())
     if len(yrs) >= 2:
         c0, c1y = yrs[0], yrs[1]
+        # CMS labels mid-release periods as "(Q1-Q2)" or "(Q1-Q3)"; full
+        # years are "(Q1-Q4)". Annualize partial periods so the YoY %
+        # compares like-for-like; full years pass through unchanged.
+        if "Q1-Q2" in str(c1y):
+            annualize_factor = 2
+            c1y_label = c1y.replace("(Q1-Q2)", "(H1 annualized)")
+        elif "Q1-Q3" in str(c1y):
+            annualize_factor = 4 / 3
+            c1y_label = c1y.replace("(Q1-Q3)", "(Q1-Q3 annualized)")
+        else:
+            annualize_factor = 1
+            c1y_label = c1y
+        st.subheader(f"📈 Fastest Growing Drugs ({c0} → {c1y_label})")
+
+        yoy_df = full_overall.groupby(["Brnd_Name", "Year"])["Tot_Spndng"].sum().reset_index()
+        pivot = yoy_df.pivot(index="Brnd_Name", columns="Year", values="Tot_Spndng").reset_index()
+        pivot.columns.name = None
         pivot = pivot.dropna(subset=[c0, c1y])
         pivot = pivot[pivot[c0] >= 1e8]
-        # Annualize 2025 H1 (×2) so the growth % isn't artificially halved by
-        # comparing a full year to a half year. Revisit when 2025 fills out.
-        pivot[c1y] = pivot[c1y] * 2
+        pivot[c1y] = pivot[c1y] * annualize_factor
         pivot["YoY_%"] = ((pivot[c1y] - pivot[c0]) / pivot[c0] * 100).round(1)
         top_growers = pivot.nlargest(10, "YoY_%")[["Brnd_Name", c0, c1y, "YoY_%"]].copy()
         top_growers[c0] = (top_growers[c0] / 1e9).round(2)
         top_growers[c1y] = (top_growers[c1y] / 1e9).round(2)
-        top_growers.columns = ["Drug", f"{c0} ($B)", "2025 (H1 annualized) ($B)", "Growth %"]
+        top_growers.columns = ["Drug", f"{c0} ($B)", f"{c1y_label} ($B)", "Growth %"]
         fig6 = px.bar(top_growers, x="Growth %", y="Drug", orientation="h",
                       text="Growth %", color="Growth %",
                       color_continuous_scale=[[0, "#00BFA6"], [1, "#34D399"]])
