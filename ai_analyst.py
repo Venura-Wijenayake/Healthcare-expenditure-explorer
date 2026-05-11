@@ -168,6 +168,7 @@ DATASET_REGISTRY: dict[str, list[str]] = {
     "covid|coronavirus|sars": ["cdc_wastewater", "cdc_vaccination"],
     "vaccine|vaccination|immunization": ["cdc_vaccination"],
     "workforce|physician|doctor|nurse|dentist|shortage": ["ahrf_state_national_2025", "hpsa_primary_care", "hrsa_workforce_projections", "gme_residency"],
+    "california.physician|california.workforce|CA.HCAI|physician.supply.california|primary.care.california|ca.physician|hcai": ["ca_hcai_physicians"],
     "insurance|uninsured|coverage": ["census_sahie", "ahrq_meps", "acs_demographics"],
     "medicaid": ["cms_medicaid_drug", "census_sahie"],
     "medicare|spending|expenditure": ["geo_variation_2014_2023", "cms_inpatient_geo", "cms_physician_payments"],
@@ -283,6 +284,7 @@ DATASET_DISPLAY: dict[str, tuple[str, str, str]] = {
     "aoa_aging_services": ("Aging Services & Programs", "AoA/ACL", "2022"),
     "rwj_county_health_rankings": ("County Health Rankings", "RWJF", "2024"),
     "ca_hcai": ("California Hospital Utilization", "CA HCAI", "2012–2017"),
+    "ca_hcai_physicians": ("CA Physicians by Specialty & Activity Hours", "CA HCAI", "License renewal survey — 2025-04-03 extract"),
 }
 
 
@@ -1188,6 +1190,36 @@ def _sum_cdc_nndss() -> tuple[str, str] | None:
     )
 
 
+def _sum_ca_hcai_physicians() -> tuple[str, str] | None:
+    """Top-20 county × specialty cells (Patient Care category) for CA physicians.
+
+    Filters to the Patient Care activity category and aggregates across
+    the five activity-hours buckets so each row is one (county,
+    specialty) cell with a total weighted physician count. Top-20 is
+    LA-heavy by design — that's the workforce distribution. The
+    statewide row count and "Activity Hours" caveat are surfaced in
+    the section header.
+    """
+    df = pd.read_csv(DATA / "ca_hcai_physicians.csv", low_memory=False)
+    df["estimated_count"] = pd.to_numeric(df["estimated_count"], errors="coerce").fillna(0)
+    pc = df[df["activity_category"] == "Patient Care"]
+    grouped = (pc.groupby(["county", "specialty"], as_index=False)
+                 ["estimated_count"].sum()
+                 .sort_values("estimated_count", ascending=False)
+                 .head(20))
+    grouped["estimated_count"] = grouped["estimated_count"].astype("int64")
+    total = int(pc["estimated_count"].sum())
+    return _section(
+        f"CA HCAI PHYSICIANS BY SPECIALTY & ACTIVITY HOURS — TOP 20 COUNTY × "
+        f"SPECIALTY CELLS (Patient Care activity only, summed across the "
+        f"five hours-per-week buckets; {total:,} total CA active physicians "
+        "from the 2025-04-03 HCAI Health Workforce License Renewal Survey "
+        "extract — weighted aggregates only, individual-level data is "
+        "confidential under CA law)",
+        grouped, max_rows=20,
+    )
+
+
 def _sum_bls_unemployment() -> tuple[str, str] | None:
     df = pd.read_csv(DATA / "bls_unemployment.csv")
     df["unemployment_rate"] = pd.to_numeric(df["unemployment_rate"], errors="coerce")
@@ -1364,6 +1396,7 @@ SUMMARIZERS: dict[str, Callable[[], tuple[str, str] | None]] = {
     "cdc_hai": _sum_cdc_hai,
     "cms_timely_care": _sum_cms_timely_care,
     "cdc_nndss": _sum_cdc_nndss,
+    "ca_hcai_physicians": _sum_ca_hcai_physicians,
     "bls_unemployment": _sum_bls_unemployment,
     "hrsa_nurse_corps": _sum_hrsa_nurse_corps,
     "cdc_alzheimers": _sum_cdc_alzheimers,

@@ -638,6 +638,23 @@ The `data/` directory is gitignored. This manifest documents every dataset, its 
   - **S_040–S_045** — IMPACT Act assessment-completion / transfer-of-health-information measures
 - Same facility universe (CCN joins cleanly to `cms_nursing_home.csv`); complementary content.
 
+### 86. CA HCAI — Physicians Actively Working by Specialty & Activity Hours
+- **File:** `ca_hcai_physicians.csv` — 25,715 rows × 6 cols (1.3 MB)
+- **Extract date:** 2025-04-03 (HCAI Health Workforce License Renewal Survey).
+- **Source:** [California Department of Health Care Access and Information — Physician Survey dataset](https://data.chhs.ca.gov/dataset/physician-survey). Five XLSX resources (Patient Care / Research / Administration / Training / Other activity categories) downloaded and stacked into a long-format CSV.
+- **Granularity:** California-only. One row per (county, specialty, activity_category, activity_hours_bucket) cell.
+- **Key columns:** `state` (always "CA"), `county` (56 California counties), `specialty` (55 self-reported specialties — Internal Medicine, Family Medicine, Pediatrics, OB/GYN, etc.), `activity_category` (Patient Care / Research / Administration / Training / Other), `activity_hours_bucket` ("1-9 Hours" / "10-19 Hours" / "20-29 Hours" / "30-39 Hours" / "40+ Hours"), `estimated_count` (weighted estimate of active licensed physicians in each cell).
+- **Universe & method:** Active-status Physician and Surgeon + Osteopathic Physician and Surgeon licensees who indicated they were actively working in a position requiring their license. HCAI weights survey responses to total active-licensee counts so the sums approximate the full active workforce. The full 131,292-physician Patient Care total reconciles to AAMC's 2023 published figure for CA active physicians (~140K).
+- **Reading the totals correctly:** Each physician is counted once *per activity category they report hours in*. Summing `estimated_count` across all five activity categories (≈ 657K) double-counts; summing within one activity category (≈ 131K for Patient Care) gives a clean physician-count.
+- **Caveat — CA law constrains the disclosure scope:** California law makes individual physician license-renewal responses confidential. Only the weighted aggregates published here are public; there is no FOIA-disclosable individual-level companion file as there is for NPPES. Attempting to recover individuals from the aggregates would be a privacy violation.
+- **Distinct from** `ca_hcai.csv` (the older "California Hospital Utilization" 2012–2017 dataset, hospital-level, not workforce-level) — same agency, different content.
+- **License:** Open public data; attribute CA HCAI.
+- **Refresh cadence:** Annual (HCAI publishes after each license renewal cycle; next extract expected mid-2026).
+- **R2 path:** `ca_hcai_physicians.parquet` (lakehouse-only routing).
+- **Reproducibility:** `scripts/fetch_ca_hcai_workforce.py`
+
+**Note: Companion NP/PA datasets were sought but are NOT published by HCAI in the equivalent county × specialty × activity-hours structure.** HCAI does include Nurse Practitioners and Physician Assistants in cross-cutting multi-profession aggregates (Health Workforce Languages, Health Workforce Education, Health Workforce Race/Ethnicity), but those have Region granularity (Central Coast / Bay Area / etc.) and different metrics (languages spoken, schools attended) — not the county × specialty supply view this entry provides for physicians. If the Workforce Atlas needs NP/PA supply distinct from MDs, the closest available proxy is the languages/education dataset filtered to those License Names; a separate ingestion would be required and the resulting frame would not have the same shape as this one.
+
 ---
 
 ## Reproducibility scripts (in `scripts/`)
@@ -647,6 +664,7 @@ The following scripts handle non-trivial fetches/parsing where a one-line wget w
 - `fetch_nih_funding.py` — paginated NIH RePORTER pull (52 states × 5 fiscal years), aggregates to state × institute
 - `fetch_partd_prescribers.py` — chunked stream of 582 MB CMS Part D Prescribers raw file, aggregates to state × specialty with derived ratios
 - `fetch_cdc_wonder_mortality.py` — paginated Socrata pulls for two NCHS weekly-deaths datasets covering 2018–2023; joins ACS population for crude rates
+- `fetch_ca_hcai_workforce.py` — downloads five XLSX activity-category resources from the CA HCAI Physician Survey, stacks them into a single long-format CSV with `activity_category` tag, validates state-wide totals against AAMC reference values
 - `fetch_fcc_broadband.py` — pulls FCC BDC county summary from the Esri Living Atlas mirror (FCC.gov direct downloads were unreliable)
 - `fetch_medicaid_drug.py` — CMS State Drug Utilization data, state-aggregated
 - `aggregate_ejscreen.py` — rolls EJScreen block-group data up to county
