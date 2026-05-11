@@ -638,6 +638,19 @@ The `data/` directory is gitignored. This manifest documents every dataset, its 
   - **S_040–S_045** — IMPACT Act assessment-completion / transfer-of-health-information measures
 - Same facility universe (CCN joins cleanly to `cms_nursing_home.csv`); complementary content.
 
+### 82. CDC FluView ILINet — Weekly Influenza-Like Illness Surveillance
+- **File:** `cdc_fluview_ilinet.csv` — 28,642 rows × 10 cols (1.8 MB)
+- **Coverage:** MMWR week 201540 (start of the 2015-16 flu season) → current week, refreshed weekly
+- **Source:** CMU Delphi Epidata API mirror of CDC FluView/ILINet — `https://api.delphi.cmu.edu/epidata/fluview/` (the [Delphi FluView endpoint](https://cmu-delphi.github.io/delphi-epidata/api/fluview.html); cleaner programmatic access than CDC's portal).
+- **Granularity:** 53 regions (50 states + DC + Puerto Rico + national `nat`) × MMWR epiweek
+- **Key columns:** `region` (Delphi 2-letter lowercase, plus `nat`), `epiweek` (YYYYWW), `issue` / `lag` / `release_date` (provisional-vs-final context — FluView is revised weekly), `num_ili`, `num_patients`, `num_providers`, `ili` (unweighted % outpatient visits flagged ILI), `wili` (weighted ILI, the headline metric).
+- **What it gives:** Real-time respiratory-illness signal at weekly cadence — the current-week ILI activity that NNDSS lacks (NNDSS lags 1–2 weeks). Spans ~10 seasons including pre-COVID baseline (2015–2019), pandemic disruption (2020–2021 — ILINet was repurposed for COVID-like illness in some weeks), and post-COVID return.
+- **Distinct from** `cdc_nndss.csv` (per-disease case incidence for ~115 notifiable infections, monthly cadence) and `cdc_wastewater.csv` (pathogen-target wastewater concentration, not visit-based prevalence).
+- **License:** Open public data; attribute CDC + CMU Delphi.
+- **Refresh cadence:** Weekly (matches upstream).
+- **R2 path:** `cdc_fluview_ilinet.parquet` (lakehouse-only routing).
+- **Reproducibility:** `scripts/fetch_cdc_fluview.py`
+
 ---
 
 ## Reproducibility scripts (in `scripts/`)
@@ -647,6 +660,7 @@ The following scripts handle non-trivial fetches/parsing where a one-line wget w
 - `fetch_nih_funding.py` — paginated NIH RePORTER pull (52 states × 5 fiscal years), aggregates to state × institute
 - `fetch_partd_prescribers.py` — chunked stream of 582 MB CMS Part D Prescribers raw file, aggregates to state × specialty with derived ratios
 - `fetch_cdc_wonder_mortality.py` — paginated Socrata pulls for two NCHS weekly-deaths datasets covering 2018–2023; joins ACS population for crude rates
+- `fetch_cdc_fluview.py` — year-paginated pulls from the CMU Delphi Epidata FluView mirror (50 states + DC + PR + national, 2015-W40 → current); refreshed weekly
 - `fetch_fcc_broadband.py` — pulls FCC BDC county summary from the Esri Living Atlas mirror (FCC.gov direct downloads were unreliable)
 - `fetch_medicaid_drug.py` — CMS State Drug Utilization data, state-aggregated
 - `aggregate_ejscreen.py` — rolls EJScreen block-group data up to county

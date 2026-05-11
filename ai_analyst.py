@@ -164,7 +164,7 @@ DATASET_REGISTRY: dict[str, list[str]] = {
     "hiv|aids": ["cdc_hiv", "hrsa_ryan_white", "census_sahie"],
     "cancer|tumor|oncology|malignant": ["nci_cancer", "cdc_mortality", "cdc_wonder_mortality"],
     "wastewater|nwss|sewage": ["cdc_wastewater"],
-    "influenza|flu|rsv|respiratory": ["cdc_wastewater", "cdc_vaccination"],
+    "influenza|flu|rsv|respiratory|ili|ilinet|fluview": ["cdc_fluview_ilinet", "cdc_wastewater", "cdc_vaccination"],
     "covid|coronavirus|sars": ["cdc_wastewater", "cdc_vaccination"],
     "vaccine|vaccination|immunization": ["cdc_vaccination"],
     "workforce|physician|doctor|nurse|dentist|shortage": ["ahrf_state_national_2025", "hpsa_primary_care", "hrsa_workforce_projections", "gme_residency"],
@@ -258,6 +258,7 @@ DATASET_DISPLAY: dict[str, tuple[str, str, str]] = {
     "cdc_nhanes": ("National Health & Nutrition Examination Survey", "CDC", "2017–2020"),
     "cdc_hai": ("Healthcare-Associated Infections (NHSN)", "CDC", "2024"),
     "cdc_nndss": ("Notifiable Disease Surveillance (NNDSS)", "CDC", "2023–2024"),
+    "cdc_fluview_ilinet": ("FluView ILINet Weekly ILI Surveillance", "CDC (via CMU Delphi)", "2015-W40 – current"),
     "cdc_alzheimers": ("Alzheimer's Disease & Healthy Aging", "CDC", "2022"),
     "brfss_state_prevalence": ("BRFSS Behavioral Risk Factors", "CDC", "2021–2023"),
     "nimh_mental_health": ("Mental Health Statistics", "NIMH", "2021"),
@@ -1188,6 +1189,36 @@ def _sum_cdc_nndss() -> tuple[str, str] | None:
     )
 
 
+def _sum_cdc_fluview_ilinet() -> tuple[str, str] | None:
+    """Latest-4-weeks weighted-ILI percentage by region.
+
+    FluView/ILINet measures the share of outpatient visits flagged as
+    influenza-like illness. State-level weighted ILI (`wili`) plus visit
+    counts gives the AI analyst a current-week respiratory-illness signal
+    that NNDSS lacks. We surface the four most-recent epiweeks per region
+    so the model can compare last-week to month-prior on its own.
+    """
+    df = pd.read_csv(
+        DATA / "cdc_fluview_ilinet.csv", low_memory=False,
+        usecols=["region", "epiweek", "num_ili", "num_patients", "wili", "ili"],
+    )
+    df = df.dropna(subset=["wili"])
+    # Pick the 4 most-recent epiweeks per region.
+    df = df.sort_values(["region", "epiweek"])
+    df = df.groupby("region", as_index=False).tail(4)
+    df["wili"] = df["wili"].round(2)
+    df["ili"] = df["ili"].round(2)
+    df["num_ili"] = pd.to_numeric(df["num_ili"], errors="coerce").round(0).astype("Int64")
+    df["num_patients"] = pd.to_numeric(df["num_patients"], errors="coerce").round(0).astype("Int64")
+    latest_ew = int(df["epiweek"].max())
+    return _section(
+        f"CDC FLUVIEW ILINET (most-recent 4 epiweeks per region through "
+        f"{latest_ew}; wili = weighted % outpatient visits for influenza-"
+        f"like illness, regions: 50 states + DC + PR + 'nat' national)",
+        df, max_rows=220,  # 53 regions × 4 weeks = 212
+    )
+
+
 def _sum_bls_unemployment() -> tuple[str, str] | None:
     df = pd.read_csv(DATA / "bls_unemployment.csv")
     df["unemployment_rate"] = pd.to_numeric(df["unemployment_rate"], errors="coerce")
@@ -1364,6 +1395,7 @@ SUMMARIZERS: dict[str, Callable[[], tuple[str, str] | None]] = {
     "cdc_hai": _sum_cdc_hai,
     "cms_timely_care": _sum_cms_timely_care,
     "cdc_nndss": _sum_cdc_nndss,
+    "cdc_fluview_ilinet": _sum_cdc_fluview_ilinet,
     "bls_unemployment": _sum_bls_unemployment,
     "hrsa_nurse_corps": _sum_hrsa_nurse_corps,
     "cdc_alzheimers": _sum_cdc_alzheimers,

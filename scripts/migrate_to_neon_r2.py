@@ -100,6 +100,7 @@ DATASET_METADATA: dict[str, dict] = {
     "hospital_compare_general_info": {"name": "Hospital Compare — General Info",             "agency": "CMS",       "category": "Quality"},
     "cms_snf":                       {"name": "CMS Skilled Nursing Facility",                "agency": "CMS",       "category": "Post-Acute"},
     "cdc_nndss":                     {"name": "CDC NNDSS Notifiable Diseases",               "agency": "CDC",       "category": "Disease"},
+    "cdc_fluview_ilinet":            {"name": "CDC FluView ILINet Weekly ILI Surveillance",  "agency": "CDC",       "category": "Disease"},
     "hrsa_mch":                      {"name": "HRSA Maternal & Child Health",                "agency": "HRSA",      "category": "Maternal/Child"},
     "nci_cancer":                    {"name": "NCI Cancer Incidence & Mortality",            "agency": "NCI",       "category": "Disease"},
     "cdc_places_county":             {"name": "CDC PLACES County-Level",                     "agency": "CDC",       "category": "Population Health"},
