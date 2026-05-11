@@ -638,6 +638,28 @@ The `data/` directory is gitignored. This manifest documents every dataset, its 
   - **S_040–S_045** — IMPACT Act assessment-completion / transfer-of-health-information measures
 - Same facility universe (CCN joins cleanly to `cms_nursing_home.csv`); complementary content.
 
+### 87. CA HCAI — Physician Supply × Preventable Hospitalizations (PQI) by County
+- **File:** `ca_hcai_supply_pqi.csv` — 406 rows × 24 cols (66 KB)
+- **Coverage:** California-only, all 58 counties × 7 AHRQ Prevention Quality Indicator conditions. Two complementary CKAN resources merged into one (county, condition) row key.
+- **Source:** [CA Department of Health Care Access and Information — Physician Supply and Preventable Hospitalizations by County](https://data.chhs.ca.gov/dataset/physician-supply-anticipated-retirement-of-practicing-physicians). The fetch script calls CKAN `package_show` for the canonical slug, downloads the "PQI Physicians Data Set" and "Physician Retirement Data Set" CSVs, pivots the retirement frame wide on the 4 forward-window buckets, and left-joins on (county, PQI condition).
+- **Granularity:** county × PQI condition (one row per cell).
+- **Schema (24 cols):**
+  - **Keys:** `state` (always "CA"), `county`, `region` (9 HCAI macro-regions, from the retirement file), `pqi_description`.
+  - **Outcome (preventable hospitalizations):** `cty_pqi_rate` (county rate per 100,000 population), `st_pqi_rate` (statewide reference), `cty_mean_los_days` / `st_mean_los_days` (length of stay), `pqi_rate_vs_state` ("High"/"Low" flag — HCAI's own categorization).
+  - **Supply:** `cty_phy_rate` (county supply rate per 100,000 for the **specialties that treat this PQI condition** — see the PQI Physicians Specialties List in the source bundle for the mapping), `st_phy_rate`, `phy_supply_vs_state`.
+  - **Retirement risk** (% of treating physicians in each forward window): `cty_retire_pct_0_2yr` / `cty_retire_pct_3_5yr` / `cty_retire_pct_6_10yr` / `cty_retire_pct_11plus_yr` (and `region_retire_pct_*` and `st_retire_pct_*` mirrors).
+- **PQI conditions covered (7):** Asthma in Younger Adults (Age 18-39), COPD or Asthma in Older Adults (Age 40+), Community-Acquired Pneumonia, Diabetes Composite, Heart Failure, Hypertension, Urinary Tract Infection. All are AHRQ-defined "preventable" admissions — those that high-quality outpatient access should keep out of the hospital.
+- **What it gives:** The supply-meets-outcomes linkage at county level. Lets you ask "where would the next clinician shift the score most?" — the optimization angle of the CA Workforce Atlas lens. The county-level Pearson correlation between mean physician supply rate and mean PQI rate is roughly **-0.23** (lower supply → higher preventable hospitalizations, as expected).
+- **Caveats:**
+  - The supply rate is **condition-specific** — it counts only physicians in the specialty areas that treat each PQI condition (e.g. pulmonologists / family medicine for COPD). It is NOT a generic "primary care physicians per 100K" metric. Averaging `cty_phy_rate` across the 7 conditions gives a useful but rough cross-county supply scalar; for any single-condition analysis, use the condition's own row.
+  - Two counties (Alpine, Sierra — the smallest by population) may carry zero values when admissions or supply fall below HCAI's suppression threshold; their per-100K rates are unstable at small denominators.
+  - The dataset is California-only by design — no FOIA-equivalent national supply-PQI join exists. HCAI is unique among state agencies in publishing this.
+- **Distinct from** `ca_hcai_physicians.csv` (#86 — physician headcount by specialty × activity hours, no outcomes) and `ca_hcai.csv` (the older Hospital Utilization Report, hospital-level not workforce-level).
+- **License:** Open public data; attribute CA HCAI.
+- **Refresh cadence:** Annual (HCAI updates with each license renewal cycle).
+- **R2 path:** `ca_hcai_supply_pqi.parquet` (lakehouse-only routing).
+- **Reproducibility:** `scripts/fetch_ca_hcai_supply_pqi.py`
+
 ---
 
 ## Reproducibility scripts (in `scripts/`)
@@ -647,6 +669,7 @@ The following scripts handle non-trivial fetches/parsing where a one-line wget w
 - `fetch_nih_funding.py` — paginated NIH RePORTER pull (52 states × 5 fiscal years), aggregates to state × institute
 - `fetch_partd_prescribers.py` — chunked stream of 582 MB CMS Part D Prescribers raw file, aggregates to state × specialty with derived ratios
 - `fetch_cdc_wonder_mortality.py` — paginated Socrata pulls for two NCHS weekly-deaths datasets covering 2018–2023; joins ACS population for crude rates
+- `fetch_ca_hcai_supply_pqi.py` — CKAN `package_show` for the supply-PQI dataset, downloads two CSV resources (PQI Physicians + Physician Retirement), pivots retirement wide on the 4 forward-window buckets, left-joins to a single county × PQI row key
 - `fetch_fcc_broadband.py` — pulls FCC BDC county summary from the Esri Living Atlas mirror (FCC.gov direct downloads were unreliable)
 - `fetch_medicaid_drug.py` — CMS State Drug Utilization data, state-aggregated
 - `aggregate_ejscreen.py` — rolls EJScreen block-group data up to county

@@ -168,6 +168,7 @@ DATASET_REGISTRY: dict[str, list[str]] = {
     "covid|coronavirus|sars": ["cdc_wastewater", "cdc_vaccination"],
     "vaccine|vaccination|immunization": ["cdc_vaccination"],
     "workforce|physician|doctor|nurse|dentist|shortage": ["ahrf_state_national_2025", "hpsa_primary_care", "hrsa_workforce_projections", "gme_residency"],
+    "physician.shortage|preventable.hospitaliz|\\bPQI\\b|primary.care.access|underserved.california|retirement.risk|physician.density": ["ca_hcai_supply_pqi"],
     "insurance|uninsured|coverage": ["census_sahie", "ahrq_meps", "acs_demographics"],
     "medicaid": ["cms_medicaid_drug", "census_sahie"],
     "medicare|spending|expenditure": ["geo_variation_2014_2023", "cms_inpatient_geo", "cms_physician_payments"],
@@ -283,6 +284,7 @@ DATASET_DISPLAY: dict[str, tuple[str, str, str]] = {
     "aoa_aging_services": ("Aging Services & Programs", "AoA/ACL", "2022"),
     "rwj_county_health_rankings": ("County Health Rankings", "RWJF", "2024"),
     "ca_hcai": ("California Hospital Utilization", "CA HCAI", "2012–2017"),
+    "ca_hcai_supply_pqi": ("CA Physician Supply × PQI Outcomes by County", "CA HCAI", "Latest extract"),
 }
 
 
@@ -1188,6 +1190,40 @@ def _sum_cdc_nndss() -> tuple[str, str] | None:
     )
 
 
+def _sum_ca_hcai_supply_pqi() -> tuple[str, str] | None:
+    """Top-10 CA counties by mean PQI rate, with mean physician supply alongside.
+
+    The headline "where supply scarcity shows up in patient outcomes"
+    view. We average across the 7 PQI conditions per county so each
+    row is a single (county, mean_pqi_rate, mean_phy_rate) summary.
+    `pqi_rate_vs_state` is included to surface the High/Low flag that
+    HCAI itself computes for the dataset.
+    """
+    df = pd.read_csv(DATA / "ca_hcai_supply_pqi.csv", low_memory=False)
+    df["cty_pqi_rate"] = pd.to_numeric(df["cty_pqi_rate"], errors="coerce")
+    df["cty_phy_rate"] = pd.to_numeric(df["cty_phy_rate"], errors="coerce")
+    grouped = (df.groupby("county", as_index=False)
+                 .agg(mean_pqi_rate_per_100k=("cty_pqi_rate", "mean"),
+                      mean_phy_supply_per_100k=("cty_phy_rate", "mean"),
+                      mean_los_days=("cty_mean_los_days", "mean"),
+                      n_pqi_conditions=("pqi_description", "nunique"))
+                 .round(1)
+                 .sort_values("mean_pqi_rate_per_100k", ascending=False)
+                 .head(10))
+    corr = (df.groupby("county")
+              .agg(phy=("cty_phy_rate", "mean"), pqi=("cty_pqi_rate", "mean"))
+              .corr().iloc[0, 1])
+    return _section(
+        "CA HCAI PHYSICIAN SUPPLY × PREVENTABLE HOSPITALIZATIONS (PQI) — TOP "
+        "10 CA COUNTIES BY MEAN PQI RATE (rates per 100,000 population; PQI = "
+        "AHRQ Prevention Quality Indicator; supply rate is condition-specific "
+        "treating-specialty physicians, averaged across the 7 PQI conditions; "
+        f"county-level Pearson(supply, PQI) = {corr:+.2f} — negative means "
+        "lower supply -> more preventable hospitalizations, as expected)",
+        grouped, max_rows=10,
+    )
+
+
 def _sum_bls_unemployment() -> tuple[str, str] | None:
     df = pd.read_csv(DATA / "bls_unemployment.csv")
     df["unemployment_rate"] = pd.to_numeric(df["unemployment_rate"], errors="coerce")
@@ -1364,6 +1400,7 @@ SUMMARIZERS: dict[str, Callable[[], tuple[str, str] | None]] = {
     "cdc_hai": _sum_cdc_hai,
     "cms_timely_care": _sum_cms_timely_care,
     "cdc_nndss": _sum_cdc_nndss,
+    "ca_hcai_supply_pqi": _sum_ca_hcai_supply_pqi,
     "bls_unemployment": _sum_bls_unemployment,
     "hrsa_nurse_corps": _sum_hrsa_nurse_corps,
     "cdc_alzheimers": _sum_cdc_alzheimers,
