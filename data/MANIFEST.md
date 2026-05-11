@@ -638,6 +638,28 @@ The `data/` directory is gitignored. This manifest documents every dataset, its 
   - **S_040–S_045** — IMPACT Act assessment-completion / transfer-of-health-information measures
 - Same facility universe (CCN joins cleanly to `cms_nursing_home.csv`); complementary content.
 
+### 84. CDC National Outbreak Reporting System (NORS) — historical outbreak record
+- **File:** `cdc_nors.csv` — 66,713 rows × 19 cols (8.0 MB)
+- **Coverage:** 1971 (waterborne) / 1973 (foodborne) → 2023 close-out year. Reports for the most recent ~12-18 months are not yet published — NORS has a CDC close-out window that lags real-time by roughly two years.
+- **Source:** [data.cdc.gov NORS — Socrata resource `5xkq-dg7x`](https://data.cdc.gov/dataset/NORS/5xkq-dg7x). Streamlined public release; per-outbreak rows.
+- **Granularity:** one row per outbreak report × state (multi-state outbreaks are split across state rows).
+- **Schema (19 cols):**
+  - **When/where:** `year`, `month`, `state`.
+  - **Etiology:** `primary_mode` (Food / Water / Person-to-person / Animal contact / Environmental / Unknown / Indeterminate), `etiology` (787 distinct pathogens — `Norovirus` variants dominate, then `Salmonella enterica`, `E. coli` shiga-toxin producing, `Clostridium perfringens`, etc.), `serotype_or_genotype`, `etiology_status` (Confirmed / Suspected).
+  - **Setting:** `setting` (Long-term care / Restaurant / School / Private home / Drinking water system / Recreational water / etc.).
+  - **Outcomes:** `illnesses`, `hospitalizations`, `info_on_hospitalizations` (denominator — outbreaks for which hospitalization data was collected), `deaths`, `info_on_deaths` (denominator). Outcome counts are right-censored on the denominator columns; per-outbreak hospitalization/death **rates** must be computed as `hospitalizations / info_on_hospitalizations`, not against `illnesses`.
+  - **Implicated source:** `food_vehicle` (free text — "guacamole", "oysters", "ground beef", etc.), `food_contaminated_ingredient`, `ifsac_category` (IFSAC food category — Mollusks / Beef / Poultry / Sprouts / Leafy greens / etc.), `water_exposure` (Drinking water / Recreational water), `water_type` (Community / Individual-private / Treated venue / Untreated venue), `animal_type`.
+- **What it gives:** Multi-decade case-book of every foodborne, waterborne, enteric, and (as of 2023) fungal outbreak reported to CDC. Powers the **historical-depth** side of Outbreak Watch (complement to NNDSS/FluView/wastewater real-time signals) and grounds AI-analyst queries about food safety, water systems, and rare pathogens.
+- **Caveats:**
+  - **Voluntary reporting**: state/local jurisdictions choose whether to submit each outbreak. Coverage varies by jurisdiction and over time. CDC documents underreporting; the dataset is the most complete national record but is not exhaustive.
+  - **2020 dip**: outbreak count dropped from ~4,200 (2019) to ~1,640 (2020) — combined effect of fewer congregate exposures during COVID-era closures and disrupted local reporting capacity.
+  - **NOT real-time**: close-out lag means the dataset is suitable for retrospective analysis, not active surveillance.
+- **Distinct from** `cdc_nndss.csv` (per-disease case incidence, weekly cadence, 1–2 week lag), `cdc_hiv.csv` / `cdc_sti.csv` (separate surveillance systems), `cdc_mortality.csv` (deaths-only, no outbreak attribution).
+- **License:** Open public data; attribute CDC.
+- **Refresh cadence:** Annual (matches CDC's close-out window — re-run the fetch script after each new reporting year is closed-out).
+- **R2 path:** `cdc_nors.parquet` (lakehouse-only routing).
+- **Reproducibility:** `scripts/fetch_cdc_nors.py`
+
 ---
 
 ## Reproducibility scripts (in `scripts/`)
@@ -647,6 +669,7 @@ The following scripts handle non-trivial fetches/parsing where a one-line wget w
 - `fetch_nih_funding.py` — paginated NIH RePORTER pull (52 states × 5 fiscal years), aggregates to state × institute
 - `fetch_partd_prescribers.py` — chunked stream of 582 MB CMS Part D Prescribers raw file, aggregates to state × specialty with derived ratios
 - `fetch_cdc_wonder_mortality.py` — paginated Socrata pulls for two NCHS weekly-deaths datasets covering 2018–2023; joins ACS population for crude rates
+- `fetch_cdc_nors.py` — paginated Socrata pull of the NORS streamlined release (resource `5xkq-dg7x`); preserves all 19 columns; per-outbreak granularity
 - `fetch_fcc_broadband.py` — pulls FCC BDC county summary from the Esri Living Atlas mirror (FCC.gov direct downloads were unreliable)
 - `fetch_medicaid_drug.py` — CMS State Drug Utilization data, state-aggregated
 - `aggregate_ejscreen.py` — rolls EJScreen block-group data up to county

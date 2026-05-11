@@ -195,6 +195,7 @@ DATASET_REGISTRY: dict[str, list[str]] = {
     "infection|MRSA|CLABSI|CAUTI|C\\.diff|sepsis|HAI|hospital.acquired": ["cdc_hai", "cms_timely_care"],
     "emergency.department|ED.wait|wait.time|ER.time|timely.care": ["cms_timely_care"],
     "tuberculosis|TB|hepatitis|Lyme|salmonella|notifiable|pertussis|mumps|measles": ["cdc_nndss"],
+    "outbreak|foodborne|waterborne|norovirus|e\\.?coli|listeria|cryptosporidium|enteric|food.poisoning|food.borne": ["cdc_nors"],
     "unemployment|jobs|labor.market|employment": ["bls_unemployment"],
     "nurse.corps|nursing.scholarship|loan.repayment|nurse.pipeline": ["hrsa_nurse_corps"],
     "alzheimer|dementia|cognitive.decline|caregiver.burden|memory": ["cdc_alzheimers"],
@@ -258,6 +259,7 @@ DATASET_DISPLAY: dict[str, tuple[str, str, str]] = {
     "cdc_nhanes": ("National Health & Nutrition Examination Survey", "CDC", "2017–2020"),
     "cdc_hai": ("Healthcare-Associated Infections (NHSN)", "CDC", "2024"),
     "cdc_nndss": ("Notifiable Disease Surveillance (NNDSS)", "CDC", "2023–2024"),
+    "cdc_nors": ("National Outbreak Reporting System (NORS)", "CDC", "1971–2023"),
     "cdc_alzheimers": ("Alzheimer's Disease & Healthy Aging", "CDC", "2022"),
     "brfss_state_prevalence": ("BRFSS Behavioral Risk Factors", "CDC", "2021–2023"),
     "nimh_mental_health": ("Mental Health Statistics", "NIMH", "2021"),
@@ -1188,6 +1190,43 @@ def _sum_cdc_nndss() -> tuple[str, str] | None:
     )
 
 
+def _sum_cdc_nors() -> tuple[str, str] | None:
+    """Top 20 largest NORS outbreak reports by illness count.
+
+    "Largest by illnesses" is more useful for the AI analyst than "most
+    recent" — recency in NORS is dominated by background-rate Norovirus
+    LTCF clusters, while the largest events surface the multi-state
+    foodborne investigations and rare-pathogen incidents that drive
+    public-health policy questions. Each row carries year + state +
+    pathogen + setting + outcome columns plus the food/water vehicle so
+    the model can reason about modes of transmission.
+    """
+    df = pd.read_csv(
+        DATA / "cdc_nors.csv", low_memory=False,
+        usecols=["year", "month", "state", "primary_mode", "etiology",
+                 "etiology_status", "setting", "illnesses",
+                 "hospitalizations", "deaths", "food_vehicle",
+                 "ifsac_category", "water_exposure", "water_type"],
+    )
+    df["illnesses"] = pd.to_numeric(df["illnesses"], errors="coerce")
+    df["hospitalizations"] = pd.to_numeric(df["hospitalizations"], errors="coerce")
+    df["deaths"] = pd.to_numeric(df["deaths"], errors="coerce")
+    df = df.dropna(subset=["illnesses"])
+    top = df.sort_values("illnesses", ascending=False).head(20).copy()
+    top["illnesses"] = top["illnesses"].astype("Int64")
+    top["hospitalizations"] = top["hospitalizations"].astype("Int64")
+    top["deaths"] = top["deaths"].astype("Int64")
+    yr_min = int(df["year"].min())
+    yr_max = int(df["year"].max())
+    return _section(
+        f"CDC NORS — TOP 20 LARGEST OUTBREAK REPORTS BY ILLNESS COUNT "
+        f"(coverage {yr_min}-{yr_max}; voluntary state/local reporting; "
+        "12-18 month CDC close-out lag — this is historical depth, not "
+        "real-time surveillance)",
+        top, max_rows=20,
+    )
+
+
 def _sum_bls_unemployment() -> tuple[str, str] | None:
     df = pd.read_csv(DATA / "bls_unemployment.csv")
     df["unemployment_rate"] = pd.to_numeric(df["unemployment_rate"], errors="coerce")
@@ -1364,6 +1403,7 @@ SUMMARIZERS: dict[str, Callable[[], tuple[str, str] | None]] = {
     "cdc_hai": _sum_cdc_hai,
     "cms_timely_care": _sum_cms_timely_care,
     "cdc_nndss": _sum_cdc_nndss,
+    "cdc_nors": _sum_cdc_nors,
     "bls_unemployment": _sum_bls_unemployment,
     "hrsa_nurse_corps": _sum_hrsa_nurse_corps,
     "cdc_alzheimers": _sum_cdc_alzheimers,
