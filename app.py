@@ -13,6 +13,7 @@ from ai_analyst import (
     DATASET_DISPLAY,
     SUMMARIZERS,
 )
+from views import ca_workforce_atlas
 
 st.set_page_config(
     page_title="U.S. Healthcare Intelligence Platform",
@@ -985,12 +986,19 @@ def render_dataset_view(dataset_key: str, state_filter: str | None,
 # ======================================================================
 # Tabs
 # ======================================================================
-tab1, tab2, tab3, tab4 = st.tabs([
+# Display order puts the demo headline view second; the tabN variable
+# names stay bound to their existing `with tabN:` blocks below (tab2 is
+# still AI Analyst, etc.) so nothing downstream needs to change.
+tab1, tab_atlas, tab2, tab3, tab4 = st.tabs([
     "🗺️  Risk Map",
+    "🩺  CA Workforce Atlas",
     "🧠  AI Analyst",
     "📊  Explore",
     "📚  Sources",
 ])
+
+with tab_atlas:
+    ca_workforce_atlas.render()
 
 
 # ======================================================================
