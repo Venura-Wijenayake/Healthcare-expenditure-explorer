@@ -5,7 +5,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from data_loader import fetch_part_d_data, fetch_part_b_data, load_geo_variation, load_ahrf, load_hpsa
+from data_loader import fetch_part_d_data, fetch_part_b_data, load_geo_variation, load_ahrf, load_hpsa, get_inventory_stats
 from ai_analyst import (
     query_analyst,
     get_active_provider,
@@ -487,23 +487,28 @@ def _quartile_color(value: float | None, all_values: list[float],
 # ======================================================================
 # STEP 2 — Header
 # ======================================================================
+_inv = get_inventory_stats()
+_inv_n = _inv["n_datasets"]
+_inv_rows_m = _inv["total_rows"] / 1e6
+_inv_ag = _inv["n_agencies"]
+
 header_left, header_right = st.columns([3, 2])
 with header_left:
     st.markdown(
-        """
+        f"""
         <div class="hei-eyebrow">U.S. HEALTHCARE INTELLIGENCE PLATFORM</div>
         <h1 class="hei-title">Healthcare Intelligence</h1>
-        <div class="hei-subtitle">81 federal datasets · AI-powered analysis · Updated through 2026</div>
+        <div class="hei-subtitle">{_inv_n} federal datasets · AI-powered analysis · Updated through 2026</div>
         """,
         unsafe_allow_html=True,
     )
 with header_right:
     st.markdown(
-        """
+        f"""
         <div style="text-align: right; margin-top: 24px;">
-          <span class="hei-pill">81 datasets</span>
-          <span class="hei-pill">7.4M rows</span>
-          <span class="hei-pill">23 agencies</span>
+          <span class="hei-pill">{_inv_n} datasets</span>
+          <span class="hei-pill">{_inv_rows_m:.1f}M rows</span>
+          <span class="hei-pill">{_inv_ag} agencies</span>
         </div>
         """,
         unsafe_allow_html=True,
@@ -552,8 +557,9 @@ with st.sidebar:
 
     if state_filter is None:
         st.markdown(
-            '<div class="hei-sb-empty">← Select a state above to see its '
-            "health intelligence profile</div>",
+            '<div class="hei-sb-empty">State filter applies to the Risk '
+            "Map tab. The CA Workforce Atlas tab has its own county "
+            "selector.</div>",
             unsafe_allow_html=True,
         )
     else:
@@ -771,7 +777,7 @@ def render_chart_for_dataset(key: str, df_in: pd.DataFrame, primary_col: str,
                     )
                     apply_dark_theme(fig)
                     fig.update_layout(height=600)
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width='stretch')
                     return
         elif chart_type == "multiline":
             numeric_cols = [c for c in df_in.select_dtypes(include="number").columns
@@ -782,7 +788,7 @@ def render_chart_for_dataset(key: str, df_in: pd.DataFrame, primary_col: str,
                 fig = px.line(df_in, x=x_col, y=ycols,
                               color_discrete_sequence=PRIMARY_COLORS)
                 apply_dark_theme(fig)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
                 return
         elif chart_type == "grouped_bar":
             numeric_cols = [c for c in df_in.select_dtypes(include="number").columns
@@ -795,7 +801,7 @@ def render_chart_for_dataset(key: str, df_in: pd.DataFrame, primary_col: str,
                              color_discrete_sequence=PRIMARY_COLORS)
                 apply_dark_theme(fig)
                 fig.update_layout(height=500)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
                 return
     except Exception:
         pass  # fall through to default
@@ -825,7 +831,7 @@ def render_chart_for_dataset(key: str, df_in: pd.DataFrame, primary_col: str,
             )
         apply_dark_theme(fig, title=_clean_label(primary_col))
         fig.update_layout(xaxis=dict(tickangle=-45), height=500)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
 
 def render_dataset_view(dataset_key: str, state_filter: str | None,
@@ -928,12 +934,12 @@ def render_dataset_view(dataset_key: str, state_filter: str | None,
                 top_label = "Top 10 States (worst)" if lib else "Top 10 States (best)"
                 st.markdown(f"**{top_label}**")
                 top10 = grouped.nlargest(10, primary)
-                st.dataframe(top10, use_container_width=True, hide_index=True)
+                st.dataframe(top10, width='stretch', hide_index=True)
             with t2:
                 bot_label = "Bottom 10 States (best)" if lib else "Bottom 10 States (worst)"
                 st.markdown(f"**{bot_label}**")
                 bot10 = grouped.nsmallest(10, primary)
-                st.dataframe(bot10, use_container_width=True, hide_index=True)
+                st.dataframe(bot10, width='stretch', hide_index=True)
         except Exception:
             pass
 
@@ -962,13 +968,13 @@ def render_dataset_view(dataset_key: str, state_filter: str | None,
                 fig_t = px.line(trend, x=year_col, y=primary, markers=True,
                                 color_discrete_sequence=["#1B6FE8"])
                 apply_dark_theme(fig_t, title=trend_title)
-                st.plotly_chart(fig_t, use_container_width=True)
+                st.plotly_chart(fig_t, width='stretch')
         except Exception:
             pass
 
     # F) Raw data expander + download
     with st.expander("📋 Raw data", expanded=False):
-        st.dataframe(data, use_container_width=True, hide_index=True)
+        st.dataframe(data, width='stretch', hide_index=True)
         st.download_button(
             "📥 Download as CSV",
             data=data.to_csv(index=False).encode("utf-8"),
@@ -1085,7 +1091,7 @@ with tab1:
                 xanchor="right",
             )],
         )
-        st.plotly_chart(fig_map, use_container_width=True)
+        st.plotly_chart(fig_map, width='stretch')
 
         # KPIs
         col_g1, col_g2, col_g3 = st.columns(3)
@@ -1133,7 +1139,7 @@ with tab1:
         fig_risk.update_traces(texttemplate="%{text:.1f}", textposition="outside")
         apply_dark_theme(fig_risk)
         fig_risk.update_layout(height=950)
-        st.plotly_chart(fig_risk, use_container_width=True)
+        st.plotly_chart(fig_risk, width='stretch')
 
         table_df = df_risk[[
             "state", "state_abbr",
@@ -1149,7 +1155,7 @@ with tab1:
                   "Insurance", "Hosp. Quality", "Poverty", "Risk Score"]:
             table_df[c] = table_df[c].round(1)
         table_df_sorted = table_df.sort_values("Rank")
-        st.dataframe(table_df_sorted, use_container_width=True, hide_index=True)
+        st.dataframe(table_df_sorted, width='stretch', hide_index=True)
         st.download_button(
             "📥 Download State Risk Index as CSV",
             data=table_df_sorted.to_csv(index=False).encode("utf-8"),
@@ -1219,7 +1225,7 @@ with tab1:
                 font=dict(family="DM Sans", color="#8BA3C7"),
                 margin={"l": 40, "r": 40, "t": 30, "b": 30},
             )
-            st.plotly_chart(fig_radar, use_container_width=True)
+            st.plotly_chart(fig_radar, width='stretch')
 
             cmp_table = pd.DataFrame({
                 "Dimension": labels,
@@ -1234,7 +1240,7 @@ with tab1:
                 "Difference (A − B)": [round(row_a["risk_score"] - row_b["risk_score"], 1)],
             })
             cmp_table = pd.concat([cmp_table, composite_row], ignore_index=True)
-            st.dataframe(cmp_table, use_container_width=True, hide_index=True)
+            st.dataframe(cmp_table, width='stretch', hide_index=True)
             st.download_button(
                 "📥 Download Comparison as CSV",
                 data=cmp_table.to_csv(index=False).encode("utf-8"),
@@ -1274,7 +1280,7 @@ with tab1:
 with tab2:
     st.subheader("🤖 AI Analyst")
     st.markdown(
-        "Ask natural-language questions across the 81 federal datasets that power this dashboard. "
+        f"Ask natural-language questions across the {_inv_n} federal datasets that power this dashboard. "
         "The analyst reasons over pre-computed summaries (state risk index, Medicare spending, "
         "Medicaid drug spending, workforce density) and returns specific, data-driven insights."
     )
@@ -1315,12 +1321,12 @@ with tab2:
     for i, eq in enumerate(EXAMPLE_QUESTIONS):
         btn_cols[i % 2].button(
             eq, key=f"ai_example_{i}",
-            on_click=_set_question, args=(eq,), use_container_width=True,
+            on_click=_set_question, args=(eq,), width='stretch',
         )
 
     question = st.text_area(
         "Your question", key="ai_question_input", height=80,
-        placeholder="Ask anything about the 81 datasets…",
+        placeholder=f"Ask anything about the {_inv_n} datasets…",
     )
     submit = st.button("🔍 Ask the analyst", type="primary", disabled=(active is None))
 
@@ -1363,7 +1369,7 @@ with tab2:
                         rows.append({"Dataset": info[0], "Agency": info[1], "Coverage": info[2]})
                     else:
                         rows.append({"Dataset": key, "Agency": "—", "Coverage": "—"})
-                st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+                st.dataframe(pd.DataFrame(rows), width='stretch', hide_index=True)
 
         if len(st.session_state.ai_history) > 1:
             st.divider()
@@ -1389,7 +1395,7 @@ with tab2:
                                     rows.append({"Dataset": info[0], "Agency": info[1], "Coverage": info[2]})
                                 else:
                                     rows.append({"Dataset": key, "Agency": "—", "Coverage": "—"})
-                            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+                            st.dataframe(pd.DataFrame(rows), width='stretch', hide_index=True)
 
 
 # ======================================================================
@@ -1450,7 +1456,7 @@ def _render_partd_enhanced(filtered_df: pd.DataFrame, full_df: pd.DataFrame,
     fig.update_traces(texttemplate="%{text}B", textposition="outside")
     apply_dark_theme(fig)
     fig.update_layout(yaxis={"categoryorder": "total ascending"}, coloraxis_showscale=False)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
     # CMS publishes one Mftr_Name='Overall' aggregate row per (Brnd, Gnrc, Year)
     # plus identical per-manufacturer rows. Filter to 'Overall' to get exactly
@@ -1469,7 +1475,7 @@ def _render_partd_enhanced(filtered_df: pd.DataFrame, full_df: pd.DataFrame,
                               "Brnd_Name": "Drug",
                               "Year": "Period"})
         apply_dark_theme(fig2)
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, width='stretch')
     else:
         st.info("No GLP-1 data found.")
 
@@ -1492,7 +1498,7 @@ def _render_partd_enhanced(filtered_df: pd.DataFrame, full_df: pd.DataFrame,
                     "Brnd_Name": "Drug", "Year": "Period"},
         )
         apply_dark_theme(fig_cmp)
-        st.plotly_chart(fig_cmp, use_container_width=True)
+        st.plotly_chart(fig_cmp, width='stretch')
         st.caption("2025 reflects partial year (Q1–Q2 only); the visual drop from 2024 isn't a spending decline.")
 
         cmp_summary = (
@@ -1510,7 +1516,7 @@ def _render_partd_enhanced(filtered_df: pd.DataFrame, full_df: pd.DataFrame,
             ["Drug", "Total Spending ($B)", "Total Beneficiaries (M)",
              "Avg Spending / Beneficiary ($)"]
         ]
-        st.dataframe(cmp_disp, use_container_width=True, hide_index=True)
+        st.dataframe(cmp_disp, width='stretch', hide_index=True)
         st.download_button("📥 Download Comparison",
                            data=cmp_disp.to_csv(index=False).encode("utf-8"),
                            file_name=f"drug_comparison_{year_label}.csv",
@@ -1551,8 +1557,8 @@ def _render_partd_enhanced(filtered_df: pd.DataFrame, full_df: pd.DataFrame,
         fig6.update_traces(texttemplate="%{text}%", textposition="outside")
         apply_dark_theme(fig6)
         fig6.update_layout(yaxis={"categoryorder": "total ascending"}, coloraxis_showscale=False)
-        st.plotly_chart(fig6, use_container_width=True)
-        st.dataframe(top_growers, use_container_width=True, hide_index=True)
+        st.plotly_chart(fig6, width='stretch')
+        st.dataframe(top_growers, width='stretch', hide_index=True)
 
     st.divider()
     st.subheader("💰 Most Expensive Drugs Per Beneficiary")
@@ -1566,7 +1572,7 @@ def _render_partd_enhanced(filtered_df: pd.DataFrame, full_df: pd.DataFrame,
     fig3.update_traces(texttemplate="$%{text:,.0f}", textposition="outside")
     apply_dark_theme(fig3)
     fig3.update_layout(yaxis={"categoryorder": "total ascending"}, coloraxis_showscale=False)
-    st.plotly_chart(fig3, use_container_width=True)
+    st.plotly_chart(fig3, width='stretch')
 
 
 def _render_partb_enhanced() -> None:
@@ -1590,7 +1596,7 @@ def _render_partb_enhanced() -> None:
     fig_b.update_traces(texttemplate="%{text}B", textposition="outside")
     apply_dark_theme(fig_b)
     fig_b.update_layout(yaxis={"categoryorder": "total ascending"}, coloraxis_showscale=False)
-    st.plotly_chart(fig_b, use_container_width=True)
+    st.plotly_chart(fig_b, width='stretch')
 
     st.subheader("🔗 Drugs in Both Part B and Part D")
     part_d_drugs = set(df["Brnd_Name"].dropna().unique())
@@ -1608,7 +1614,7 @@ def _render_partb_enhanced() -> None:
                        barmode="group",
                        color_discrete_map={"Part D ($B)": "#1B6FE8", "Part B ($B)": "#F59E0B"})
         apply_dark_theme(fig_o)
-        st.plotly_chart(fig_o, use_container_width=True)
+        st.plotly_chart(fig_o, width='stretch')
         st.caption(f"{len(overlap):,} drugs appear in both Part B and Part D.")
 
 
@@ -1635,7 +1641,7 @@ def _render_geovariation_enhanced() -> None:
     apply_dark_theme(fig_w)
     fig_w.update_layout(xaxis={"categoryorder": "array",
                                "categoryarray": top15["st_abbrev"].tolist()})
-    st.plotly_chart(fig_w, use_container_width=True)
+    st.plotly_chart(fig_w, width='stretch')
 
     st.subheader("🚨 Provider Shortage — Practitioners Needed")
     with st.spinner("Loading HRSA HPSA data..."):
@@ -1656,7 +1662,7 @@ def _render_geovariation_enhanced() -> None:
     apply_dark_theme(fig_s)
     fig_s.update_layout(xaxis={"categoryorder": "array",
                                "categoryarray": top15s["Primary State Abbreviation"].tolist()})
-    st.plotly_chart(fig_s, use_container_width=True)
+    st.plotly_chart(fig_s, width='stretch')
 
 
 with tab3:
@@ -1713,7 +1719,7 @@ with tab3:
 with tab4:
     st.markdown(
         '<div class="hei-intro">The U.S. Healthcare Intelligence Platform '
-        "aggregates 81 federal datasets from 23 agencies into a single "
+        f"aggregates {_inv_n} federal datasets from {_inv_ag} agencies into a single "
         "queryable intelligence layer. This platform is open source — "
         "contributors can add datasets by following the contributor "
         "guide in the GitHub repository.</div>",
@@ -1822,7 +1828,7 @@ with tab4:
 
     df_sources = pd.DataFrame(DATASETS)
 
-    # KPIs across all 81 datasets (computed BEFORE filtering)
+    # KPIs across all datasets (computed BEFORE filtering)
     total_rows = int(df_sources["rows"].sum())
     year_start_min = int(df_sources["year_start"].min())
     year_end_max = min(int(df_sources["year_end"].max()), 2026)
@@ -1860,7 +1866,7 @@ with tab4:
         "rows": "Rows", "description": "Description",
     })
     st.dataframe(
-        display, use_container_width=True, hide_index=True,
+        display, width='stretch', hide_index=True,
         column_config={
             "Rows": st.column_config.NumberColumn("Rows", format="%d"),
             "Description": st.column_config.TextColumn("Description", width="large"),

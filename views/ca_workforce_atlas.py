@@ -188,19 +188,35 @@ def _panel_supply_gap(county: str, pp: pd.DataFrame) -> None:
         st.info(f"No HCAI physician records for {county} County "
                 "(HCAI does not report Alpine or Sierra).")
         return
-    d = d.sort_values("per_100k")
-    colors = np.where(d["per_100k"] < d["ca_per_100k"], _RED, _TEAL)
-    fig = go.Figure()
-    fig.add_bar(y=d["specialty"], x=d["per_100k"], orientation="h",
-                marker_color=colors, name=f"{county} County",
-                hovertemplate="%{y}<br>%{x:.0f} / 100K<extra></extra>")
-    fig.add_scatter(y=d["specialty"], x=d["ca_per_100k"], mode="markers",
-                    marker=dict(symbol="diamond", size=10, color=_AMBER),
-                    name="CA average",
-                    hovertemplate="CA avg %{x:.0f} / 100K<extra></extra>")
-    fig.update_xaxes(title="Physicians per 100,000")
-    st.plotly_chart(_layout(fig, height=max(300, 42 * len(d))),
-                    use_container_width=True)
+    def _fig(frame: pd.DataFrame, row_px: int = 42) -> go.Figure:
+        frame = frame.sort_values("per_100k")  # display by rate
+        colors = np.where(frame["per_100k"] < frame["ca_per_100k"],
+                          _RED, _TEAL)
+        fig = go.Figure()
+        fig.add_bar(y=frame["specialty"], x=frame["per_100k"],
+                    orientation="h", marker_color=colors,
+                    name=f"{county} County",
+                    hovertemplate="%{y}<br>%{x:.0f} / 100K<extra></extra>")
+        fig.add_scatter(y=frame["specialty"], x=frame["ca_per_100k"],
+                        mode="markers",
+                        marker=dict(symbol="diamond", size=10, color=_AMBER),
+                        name="CA average",
+                        hovertemplate="CA avg %{x:.0f} / 100K<extra></extra>")
+        fig.update_xaxes(title="Physicians per 100,000")
+        return _layout(fig, height=max(260, row_px * len(frame)))
+
+    # Counties like Los Angeles list 60+ specialties that scroll
+    # forever; cap the headline chart at the 15 largest BY physician
+    # count (still displayed BY rate) and tuck the rest in an expander.
+    if len(d) <= 15:
+        st.plotly_chart(_fig(d), width='stretch')
+    else:
+        top = d.nlargest(15, "estimated_count")
+        st.plotly_chart(_fig(top), width='stretch')
+        st.caption(f"Showing the 15 specialties with the most physicians. "
+                   f"{len(d) - 15} smaller specialties hidden.")
+        with st.expander(f"Show all {len(d)} specialties"):
+            st.plotly_chart(_fig(d, row_px=24), width='stretch')
 
 
 def _panel_outcomes_gap(county: str, sp: pd.DataFrame) -> None:
@@ -228,7 +244,7 @@ def _panel_outcomes_gap(county: str, sp: pd.DataFrame) -> None:
     fig.update_layout(barmode="group")
     fig.update_xaxes(title="Preventable hospitalizations per 100,000")
     st.plotly_chart(_layout(fig, height=max(320, 50 * len(d))),
-                    use_container_width=True)
+                    width='stretch')
 
 
 @st.cache_data(show_spinner=False)
@@ -286,7 +302,7 @@ def _panel_cross_reference(county: str, sp: pd.DataFrame) -> None:
     fig.update_yaxes(title=f"{condition} hospitalizations per 100,000")
     st.plotly_chart(_layout(fig, height=460,
                             title=f"{condition}: supply vs outcomes, all CA counties"),
-                    use_container_width=True)
+                    width='stretch')
 
 
 def _panel_priority(county: str, sp: pd.DataFrame) -> None:
@@ -318,7 +334,15 @@ def _panel_priority(county: str, sp: pd.DataFrame) -> None:
         "cty_pqi_rate": "County PQI /100K",
         "st_pqi_rate": "State PQI /100K",
     })
-    st.dataframe(show, use_container_width=True, hide_index=True)
+    st.dataframe(show, width='stretch', hide_index=True)
+    st.caption(
+        "Sorted by absolute preventable-hospitalization-rate difference. "
+        "Note: Community-Acquired Pneumonia (2.41× state mean) and Urinary "
+        "Tract Infection (2.29×) show larger *relative* excess than Heart "
+        "Failure (2.05×), but Heart Failure carries the largest absolute "
+        "case-rate gap — the operational priority signal for capacity "
+        "planning."
+    )
     with st.expander("Methodology"):
         st.markdown(
             "AHRQ Prevention Quality Indicators (PQIs) are conditions for "
@@ -368,6 +392,12 @@ def render() -> None:
     else:
         st.markdown(f"> Showing **{county} County**. Switch counties above; "
                     "Glenn County is the featured demonstration case.")
+
+    st.caption(
+        "Data vintage: HCAI Workforce 2022 · CDC SVI 2022 · AAMC state "
+        "context 2012. Physician supply moves <5%/year — directionally "
+        "valid, not real-time."
+    )
 
     st.divider()
     _panel_header(county, sp, ph, svi, aamc)

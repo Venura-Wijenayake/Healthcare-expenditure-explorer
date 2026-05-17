@@ -27,6 +27,7 @@ import pandas as pd
 import requests
 
 from _pg_loader import (
+    inventory_stats as _pg_inventory_stats,
     lookup_storage as _pg_lookup_storage,
     pivot_to_wide as _pg_pivot_to_wide,
     query_observations_long as _pg_query_observations_long,
@@ -69,6 +70,20 @@ except ImportError:  # pragma: no cover
 def _lookup_storage(dataset_key: str) -> dict | None:
     """Fetch one dataset_registry row, cached for the process lifetime."""
     return _pg_lookup_storage(dataset_key)
+
+
+@cache_data(ttl=3600, show_spinner=False)
+def get_inventory_stats() -> dict:
+    """Header-banner inventory counts from dataset_registry, cached 1h.
+
+    Falls back to a non-stale snapshot (captured 2026-05) if Postgres is
+    unreachable, so the header never reverts to the old hardcoded
+    81/7.4M/23 or breaks.
+    """
+    stats = _pg_inventory_stats()
+    if stats and stats.get("n_datasets"):
+        return stats
+    return {"n_datasets": 98, "total_rows": 17_684_243, "n_agencies": 16}
 
 
 _row_count_seen: set[str] = set()
