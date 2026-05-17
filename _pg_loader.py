@@ -83,6 +83,37 @@ def lookup_storage(dataset_key: str) -> dict | None:
     return out
 
 
+def inventory_stats() -> dict | None:
+    """Aggregate dataset_registry for the header banner.
+
+    Returns {"n_datasets", "total_rows", "n_agencies"} or None if
+    Postgres is unreachable (caller supplies a fallback). NULL
+    row_count rows contribute 0 via COALESCE.
+    """
+    try:
+        conn = get_postgres_conn()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Postgres connect failed for inventory_stats: %s", exc)
+        return None
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT COUNT(*), COALESCE(SUM(row_count), 0), "
+                "COUNT(DISTINCT agency) FROM dataset_registry"
+            )
+            n_datasets, total_rows, n_agencies = cur.fetchone()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("inventory_stats query failed: %s", exc)
+        return None
+    finally:
+        conn.close()
+    return {
+        "n_datasets": int(n_datasets),
+        "total_rows": int(total_rows),
+        "n_agencies": int(n_agencies),
+    }
+
+
 def query_observations_long(dataset_key: str, filters: dict[str, Any]) -> pd.DataFrame:
     """Pull observations rows for one dataset_key, optionally filtered.
 

@@ -23,15 +23,29 @@ import pandas as pd
 
 DATA = Path("data")
 
-SYSTEM_PROMPT = (
-    "You are an expert healthcare policy analyst and data scientist with access to "
-    "81 federal datasets covering Medicare spending, workforce supply, disease burden, "
-    "hospital quality, social determinants, vaccination, and more across all 50 US states. "
-    "Your job is to answer questions by reasoning across these datasets, identifying "
-    "patterns, correlations, and actionable insights. Always cite which datasets you are "
-    "drawing from. Be specific, data-driven, and concise. When you don't have enough data "
-    "to answer definitively, say so."
-)
+def _dataset_count() -> int:
+    """Live federal-dataset count from the registry; 98 fallback offline."""
+    try:
+        from data_loader import get_inventory_stats
+        n = get_inventory_stats().get("n_datasets")
+        return int(n) if n else 98
+    except Exception:  # noqa: BLE001
+        return 98
+
+
+def _system_prompt() -> str:
+    """SYSTEM_PROMPT built per-call so the dataset count stays dynamic."""
+    return (
+        f"You are Lighthouse Open Health, an open-source Living Systematic "
+        f"Review of U.S. healthcare data spanning {_dataset_count()} federal "
+        "datasets covering Medicare spending, workforce supply, disease "
+        "burden, hospital quality, social determinants, vaccination, and "
+        "more across all 50 US states. Your job is to answer questions by "
+        "reasoning across these datasets, identifying patterns, "
+        "correlations, and actionable insights. Always cite which datasets "
+        "you are drawing from. Be specific, data-driven, and concise. When "
+        "you don't have enough data to answer definitively, say so."
+    )
 
 PROVIDERS = ["groq", "openai", "gemini", "together"]
 PROVIDER_LABELS = {
@@ -81,7 +95,7 @@ def _call_groq(question: str, context: str) -> str:
     resp = client.chat.completions.create(
         model=GROQ_MODEL,
         messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": _system_prompt()},
             {"role": "user", "content": _user_msg(question, context)},
         ],
         temperature=0.3,
@@ -96,7 +110,7 @@ def _call_openai(question: str, context: str) -> str:
     resp = client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": _system_prompt()},
             {"role": "user", "content": _user_msg(question, context)},
         ],
         temperature=0.3,
@@ -108,7 +122,7 @@ def _call_openai(question: str, context: str) -> str:
 def _call_gemini(question: str, context: str) -> str:
     import google.generativeai as genai
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    model = genai.GenerativeModel(GEMINI_MODEL, system_instruction=SYSTEM_PROMPT)
+    model = genai.GenerativeModel(GEMINI_MODEL, system_instruction=_system_prompt())
     resp = model.generate_content(
         _user_msg(question, context),
         generation_config={"temperature": 0.3, "max_output_tokens": 1500},
@@ -122,7 +136,7 @@ def _call_together(question: str, context: str) -> str:
     resp = client.chat.completions.create(
         model=TOGETHER_MODEL,
         messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": _system_prompt()},
             {"role": "user", "content": _user_msg(question, context)},
         ],
         temperature=0.3,

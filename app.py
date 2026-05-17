@@ -5,7 +5,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from data_loader import fetch_part_d_data, fetch_part_b_data, load_geo_variation, load_ahrf, load_hpsa
+from data_loader import fetch_part_d_data, fetch_part_b_data, load_geo_variation, load_ahrf, load_hpsa, get_inventory_stats
 from ai_analyst import (
     query_analyst,
     get_active_provider,
@@ -13,9 +13,10 @@ from ai_analyst import (
     DATASET_DISPLAY,
     SUMMARIZERS,
 )
+from views import ca_workforce_atlas, accountability, outbreak_watch
 
 st.set_page_config(
-    page_title="U.S. Healthcare Intelligence Platform",
+    page_title="Lighthouse Open Health",
     page_icon="🏥",
     layout="wide",
 )
@@ -486,23 +487,28 @@ def _quartile_color(value: float | None, all_values: list[float],
 # ======================================================================
 # STEP 2 — Header
 # ======================================================================
+_inv = get_inventory_stats()
+_inv_n = _inv["n_datasets"]
+_inv_rows_m = _inv["total_rows"] / 1e6
+_inv_ag = _inv["n_agencies"]
+
 header_left, header_right = st.columns([3, 2])
 with header_left:
     st.markdown(
-        """
-        <div class="hei-eyebrow">U.S. HEALTHCARE INTELLIGENCE PLATFORM</div>
-        <h1 class="hei-title">Healthcare Intelligence</h1>
-        <div class="hei-subtitle">81 federal datasets · AI-powered analysis · Updated through 2026</div>
+        f"""
+        <div class="hei-eyebrow">LIGHTHOUSE OPEN HEALTH</div>
+        <h1 class="hei-title">Lighthouse Open Health</h1>
+        <div class="hei-subtitle">An open-source Living Systematic Review of U.S. healthcare data · {_inv_n} federal datasets · AI-powered analysis</div>
         """,
         unsafe_allow_html=True,
     )
 with header_right:
     st.markdown(
-        """
+        f"""
         <div style="text-align: right; margin-top: 24px;">
-          <span class="hei-pill">81 datasets</span>
-          <span class="hei-pill">7.4M rows</span>
-          <span class="hei-pill">23 agencies</span>
+          <span class="hei-pill">{_inv_n} datasets</span>
+          <span class="hei-pill">{_inv_rows_m:.1f}M rows</span>
+          <span class="hei-pill">{_inv_ag} agencies</span>
         </div>
         """,
         unsafe_allow_html=True,
@@ -527,8 +533,8 @@ df = df.dropna(subset=["Tot_Spndng"])
 with st.sidebar:
     st.markdown(
         '<div style="display:flex;align-items:center;gap:8px;margin-top:4px;">'
-        '<span style="font-size:1.2rem;">🏥</span>'
-        '<span style="font-family:Space Grotesk;font-size:0.9rem;font-weight:600;color:var(--text-primary);">HEI Platform</span>'
+        '<span style="font-size:1.2rem;">🕯️</span>'
+        '<span style="font-family:Space Grotesk;font-size:0.9rem;font-weight:600;color:var(--text-primary);">Lighthouse Open Health</span>'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -551,8 +557,9 @@ with st.sidebar:
 
     if state_filter is None:
         st.markdown(
-            '<div class="hei-sb-empty">← Select a state above to see its '
-            "health intelligence profile</div>",
+            '<div class="hei-sb-empty">State filter applies to the Risk '
+            "Map tab. The CA Workforce Atlas tab has its own county "
+            "selector.</div>",
             unsafe_allow_html=True,
         )
     else:
@@ -770,7 +777,7 @@ def render_chart_for_dataset(key: str, df_in: pd.DataFrame, primary_col: str,
                     )
                     apply_dark_theme(fig)
                     fig.update_layout(height=600)
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width='stretch')
                     return
         elif chart_type == "multiline":
             numeric_cols = [c for c in df_in.select_dtypes(include="number").columns
@@ -781,7 +788,7 @@ def render_chart_for_dataset(key: str, df_in: pd.DataFrame, primary_col: str,
                 fig = px.line(df_in, x=x_col, y=ycols,
                               color_discrete_sequence=PRIMARY_COLORS)
                 apply_dark_theme(fig)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
                 return
         elif chart_type == "grouped_bar":
             numeric_cols = [c for c in df_in.select_dtypes(include="number").columns
@@ -794,7 +801,7 @@ def render_chart_for_dataset(key: str, df_in: pd.DataFrame, primary_col: str,
                              color_discrete_sequence=PRIMARY_COLORS)
                 apply_dark_theme(fig)
                 fig.update_layout(height=500)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
                 return
     except Exception:
         pass  # fall through to default
@@ -824,7 +831,7 @@ def render_chart_for_dataset(key: str, df_in: pd.DataFrame, primary_col: str,
             )
         apply_dark_theme(fig, title=_clean_label(primary_col))
         fig.update_layout(xaxis=dict(tickangle=-45), height=500)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
 
 def render_dataset_view(dataset_key: str, state_filter: str | None,
@@ -927,12 +934,12 @@ def render_dataset_view(dataset_key: str, state_filter: str | None,
                 top_label = "Top 10 States (worst)" if lib else "Top 10 States (best)"
                 st.markdown(f"**{top_label}**")
                 top10 = grouped.nlargest(10, primary)
-                st.dataframe(top10, use_container_width=True, hide_index=True)
+                st.dataframe(top10, width='stretch', hide_index=True)
             with t2:
                 bot_label = "Bottom 10 States (best)" if lib else "Bottom 10 States (worst)"
                 st.markdown(f"**{bot_label}**")
                 bot10 = grouped.nsmallest(10, primary)
-                st.dataframe(bot10, use_container_width=True, hide_index=True)
+                st.dataframe(bot10, width='stretch', hide_index=True)
         except Exception:
             pass
 
@@ -961,13 +968,13 @@ def render_dataset_view(dataset_key: str, state_filter: str | None,
                 fig_t = px.line(trend, x=year_col, y=primary, markers=True,
                                 color_discrete_sequence=["#1B6FE8"])
                 apply_dark_theme(fig_t, title=trend_title)
-                st.plotly_chart(fig_t, use_container_width=True)
+                st.plotly_chart(fig_t, width='stretch')
         except Exception:
             pass
 
     # F) Raw data expander + download
     with st.expander("📋 Raw data", expanded=False):
-        st.dataframe(data, use_container_width=True, hide_index=True)
+        st.dataframe(data, width='stretch', hide_index=True)
         st.download_button(
             "📥 Download as CSV",
             data=data.to_csv(index=False).encode("utf-8"),
@@ -985,18 +992,63 @@ def render_dataset_view(dataset_key: str, state_filter: str | None,
 # ======================================================================
 # Tabs
 # ======================================================================
-tab1, tab2, tab3, tab4 = st.tabs([
+# Display order puts the demo headline view second; the tabN variable
+# names stay bound to their existing `with tabN:` blocks below (tab2 is
+# still AI Analyst, etc.) so nothing downstream needs to change.
+tab1, tab_atlas, tab_acct, tab_outbreak, tab2, tab3, tab4 = st.tabs([
     "🗺️  Risk Map",
+    "🩺  CA Workforce Atlas",
+    "🏛️  Accountability",
+    "👁️  Outbreak Watch",
     "🧠  AI Analyst",
     "📊  Explore",
     "📚  Sources",
 ])
+
+with tab_atlas:
+    ca_workforce_atlas.render()
+
+with tab_acct:
+    accountability.render()
+
+with tab_outbreak:
+    outbreak_watch.render()
 
 
 # ======================================================================
 # TAB 1 — Risk Map (Geography + Compare States)
 # ======================================================================
 with tab1:
+    with st.expander("About Lighthouse Open Health", expanded=False):
+        st.markdown(
+            "Lighthouse Open Health is an open-source platform that makes "
+            "the full corpus of federally-disclosed U.S. healthcare data "
+            "queryable in one place. Federal health data — Medicare "
+            "spending, physician workforce, disease surveillance, "
+            "nursing-home enforcement records, FCA fraud recoveries — "
+            "currently lives across dozens of agency sites, in dozens of "
+            "formats, with no unified lookup. This platform is a Living "
+            "Systematic Review: every public datapoint is recallable, "
+            "cross-referenceable, and AI-assisted, with full raw data "
+            "preserved (no pre-computed summaries).\n\n"
+            "Three analytical lenses anchor the platform:\n\n"
+            "- **Outbreak Watch** — what disease threats CDC is warning "
+            "about right now, cross-referenced with active national "
+            "surveillance feeds\n"
+            "- **CA Workforce Atlas** — where in California the next "
+            "clinician matters most, mapping physician supply against "
+            "preventable-hospitalization outcomes\n"
+            "- **Provider Accountability** — federally-disclosed nursing "
+            "home enforcement records (citations, fines, quality "
+            "measures) for any of ~15,000 U.S. facilities in one lookup\n\n"
+            "Built by Venura Wijenayake (Technical Director, Learn to "
+            "Achieve) — a California 501(c)(3) public-benefit nonprofit. "
+            "Source code and contribution guide: "
+            "[github.com/Venura-Wijenayake/Healthcare-expenditure-explorer]"
+            "(https://github.com/Venura-Wijenayake/Healthcare-expenditure-explorer).\n\n"
+            "_Federal data only. Not for clinical use. Public-data "
+            "attribution preserved on every panel._"
+        )
     view = st.radio(
         "View",
         ["🗺️ National Risk Map", "🔍 State Comparator"],
@@ -1077,7 +1129,7 @@ with tab1:
                 xanchor="right",
             )],
         )
-        st.plotly_chart(fig_map, use_container_width=True)
+        st.plotly_chart(fig_map, width='stretch')
 
         # KPIs
         col_g1, col_g2, col_g3 = st.columns(3)
@@ -1125,7 +1177,7 @@ with tab1:
         fig_risk.update_traces(texttemplate="%{text:.1f}", textposition="outside")
         apply_dark_theme(fig_risk)
         fig_risk.update_layout(height=950)
-        st.plotly_chart(fig_risk, use_container_width=True)
+        st.plotly_chart(fig_risk, width='stretch')
 
         table_df = df_risk[[
             "state", "state_abbr",
@@ -1141,7 +1193,7 @@ with tab1:
                   "Insurance", "Hosp. Quality", "Poverty", "Risk Score"]:
             table_df[c] = table_df[c].round(1)
         table_df_sorted = table_df.sort_values("Rank")
-        st.dataframe(table_df_sorted, use_container_width=True, hide_index=True)
+        st.dataframe(table_df_sorted, width='stretch', hide_index=True)
         st.download_button(
             "📥 Download State Risk Index as CSV",
             data=table_df_sorted.to_csv(index=False).encode("utf-8"),
@@ -1211,7 +1263,7 @@ with tab1:
                 font=dict(family="DM Sans", color="#8BA3C7"),
                 margin={"l": 40, "r": 40, "t": 30, "b": 30},
             )
-            st.plotly_chart(fig_radar, use_container_width=True)
+            st.plotly_chart(fig_radar, width='stretch')
 
             cmp_table = pd.DataFrame({
                 "Dimension": labels,
@@ -1226,7 +1278,7 @@ with tab1:
                 "Difference (A − B)": [round(row_a["risk_score"] - row_b["risk_score"], 1)],
             })
             cmp_table = pd.concat([cmp_table, composite_row], ignore_index=True)
-            st.dataframe(cmp_table, use_container_width=True, hide_index=True)
+            st.dataframe(cmp_table, width='stretch', hide_index=True)
             st.download_button(
                 "📥 Download Comparison as CSV",
                 data=cmp_table.to_csv(index=False).encode("utf-8"),
@@ -1266,7 +1318,7 @@ with tab1:
 with tab2:
     st.subheader("🤖 AI Analyst")
     st.markdown(
-        "Ask natural-language questions across the 81 federal datasets that power this dashboard. "
+        f"Ask natural-language questions across the {_inv_n} federal datasets that power this dashboard. "
         "The analyst reasons over pre-computed summaries (state risk index, Medicare spending, "
         "Medicaid drug spending, workforce density) and returns specific, data-driven insights."
     )
@@ -1307,12 +1359,12 @@ with tab2:
     for i, eq in enumerate(EXAMPLE_QUESTIONS):
         btn_cols[i % 2].button(
             eq, key=f"ai_example_{i}",
-            on_click=_set_question, args=(eq,), use_container_width=True,
+            on_click=_set_question, args=(eq,), width='stretch',
         )
 
     question = st.text_area(
         "Your question", key="ai_question_input", height=80,
-        placeholder="Ask anything about the 81 datasets…",
+        placeholder=f"Ask anything about the {_inv_n} datasets…",
     )
     submit = st.button("🔍 Ask the analyst", type="primary", disabled=(active is None))
 
@@ -1355,7 +1407,7 @@ with tab2:
                         rows.append({"Dataset": info[0], "Agency": info[1], "Coverage": info[2]})
                     else:
                         rows.append({"Dataset": key, "Agency": "—", "Coverage": "—"})
-                st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+                st.dataframe(pd.DataFrame(rows), width='stretch', hide_index=True)
 
         if len(st.session_state.ai_history) > 1:
             st.divider()
@@ -1381,7 +1433,7 @@ with tab2:
                                     rows.append({"Dataset": info[0], "Agency": info[1], "Coverage": info[2]})
                                 else:
                                     rows.append({"Dataset": key, "Agency": "—", "Coverage": "—"})
-                            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+                            st.dataframe(pd.DataFrame(rows), width='stretch', hide_index=True)
 
 
 # ======================================================================
@@ -1442,7 +1494,7 @@ def _render_partd_enhanced(filtered_df: pd.DataFrame, full_df: pd.DataFrame,
     fig.update_traces(texttemplate="%{text}B", textposition="outside")
     apply_dark_theme(fig)
     fig.update_layout(yaxis={"categoryorder": "total ascending"}, coloraxis_showscale=False)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
     # CMS publishes one Mftr_Name='Overall' aggregate row per (Brnd, Gnrc, Year)
     # plus identical per-manufacturer rows. Filter to 'Overall' to get exactly
@@ -1461,7 +1513,7 @@ def _render_partd_enhanced(filtered_df: pd.DataFrame, full_df: pd.DataFrame,
                               "Brnd_Name": "Drug",
                               "Year": "Period"})
         apply_dark_theme(fig2)
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, width='stretch')
     else:
         st.info("No GLP-1 data found.")
 
@@ -1484,7 +1536,7 @@ def _render_partd_enhanced(filtered_df: pd.DataFrame, full_df: pd.DataFrame,
                     "Brnd_Name": "Drug", "Year": "Period"},
         )
         apply_dark_theme(fig_cmp)
-        st.plotly_chart(fig_cmp, use_container_width=True)
+        st.plotly_chart(fig_cmp, width='stretch')
         st.caption("2025 reflects partial year (Q1–Q2 only); the visual drop from 2024 isn't a spending decline.")
 
         cmp_summary = (
@@ -1502,7 +1554,7 @@ def _render_partd_enhanced(filtered_df: pd.DataFrame, full_df: pd.DataFrame,
             ["Drug", "Total Spending ($B)", "Total Beneficiaries (M)",
              "Avg Spending / Beneficiary ($)"]
         ]
-        st.dataframe(cmp_disp, use_container_width=True, hide_index=True)
+        st.dataframe(cmp_disp, width='stretch', hide_index=True)
         st.download_button("📥 Download Comparison",
                            data=cmp_disp.to_csv(index=False).encode("utf-8"),
                            file_name=f"drug_comparison_{year_label}.csv",
@@ -1543,8 +1595,8 @@ def _render_partd_enhanced(filtered_df: pd.DataFrame, full_df: pd.DataFrame,
         fig6.update_traces(texttemplate="%{text}%", textposition="outside")
         apply_dark_theme(fig6)
         fig6.update_layout(yaxis={"categoryorder": "total ascending"}, coloraxis_showscale=False)
-        st.plotly_chart(fig6, use_container_width=True)
-        st.dataframe(top_growers, use_container_width=True, hide_index=True)
+        st.plotly_chart(fig6, width='stretch')
+        st.dataframe(top_growers, width='stretch', hide_index=True)
 
     st.divider()
     st.subheader("💰 Most Expensive Drugs Per Beneficiary")
@@ -1558,7 +1610,7 @@ def _render_partd_enhanced(filtered_df: pd.DataFrame, full_df: pd.DataFrame,
     fig3.update_traces(texttemplate="$%{text:,.0f}", textposition="outside")
     apply_dark_theme(fig3)
     fig3.update_layout(yaxis={"categoryorder": "total ascending"}, coloraxis_showscale=False)
-    st.plotly_chart(fig3, use_container_width=True)
+    st.plotly_chart(fig3, width='stretch')
 
 
 def _render_partb_enhanced() -> None:
@@ -1582,7 +1634,7 @@ def _render_partb_enhanced() -> None:
     fig_b.update_traces(texttemplate="%{text}B", textposition="outside")
     apply_dark_theme(fig_b)
     fig_b.update_layout(yaxis={"categoryorder": "total ascending"}, coloraxis_showscale=False)
-    st.plotly_chart(fig_b, use_container_width=True)
+    st.plotly_chart(fig_b, width='stretch')
 
     st.subheader("🔗 Drugs in Both Part B and Part D")
     part_d_drugs = set(df["Brnd_Name"].dropna().unique())
@@ -1600,7 +1652,7 @@ def _render_partb_enhanced() -> None:
                        barmode="group",
                        color_discrete_map={"Part D ($B)": "#1B6FE8", "Part B ($B)": "#F59E0B"})
         apply_dark_theme(fig_o)
-        st.plotly_chart(fig_o, use_container_width=True)
+        st.plotly_chart(fig_o, width='stretch')
         st.caption(f"{len(overlap):,} drugs appear in both Part B and Part D.")
 
 
@@ -1627,7 +1679,7 @@ def _render_geovariation_enhanced() -> None:
     apply_dark_theme(fig_w)
     fig_w.update_layout(xaxis={"categoryorder": "array",
                                "categoryarray": top15["st_abbrev"].tolist()})
-    st.plotly_chart(fig_w, use_container_width=True)
+    st.plotly_chart(fig_w, width='stretch')
 
     st.subheader("🚨 Provider Shortage — Practitioners Needed")
     with st.spinner("Loading HRSA HPSA data..."):
@@ -1648,7 +1700,7 @@ def _render_geovariation_enhanced() -> None:
     apply_dark_theme(fig_s)
     fig_s.update_layout(xaxis={"categoryorder": "array",
                                "categoryarray": top15s["Primary State Abbreviation"].tolist()})
-    st.plotly_chart(fig_s, use_container_width=True)
+    st.plotly_chart(fig_s, width='stretch')
 
 
 with tab3:
@@ -1704,11 +1756,11 @@ with tab3:
 # ======================================================================
 with tab4:
     st.markdown(
-        '<div class="hei-intro">The U.S. Healthcare Intelligence Platform '
-        "aggregates 81 federal datasets from 23 agencies into a single "
-        "queryable intelligence layer. This platform is open source — "
-        "contributors can add datasets by following the contributor "
-        "guide in the GitHub repository.</div>",
+        '<div class="hei-intro">Lighthouse Open Health '
+        f"aggregates {_inv_n} federal datasets from {_inv_ag} agencies into a single "
+        "queryable Living Systematic Review of U.S. healthcare data. This "
+        "platform is open source — contributors can add datasets by "
+        "following the contributor guide in the GitHub repository.</div>",
         unsafe_allow_html=True,
     )
     st.subheader("📚 Data Sources")
@@ -1750,7 +1802,12 @@ with tab4:
         {"name": "HPSA — Mental Health", "agency": "HRSA", "category": "Provider Shortage", "year_range": "Current", "year_start": 2025, "year_end": 2025, "granularity": "HPSA designation", "description": "Mental health HPSA designations using the same schema as Primary Care.", "rows": 39517},
         {"name": "HRSA FQHC Site Roster", "agency": "HRSA", "category": "Health Centers", "year_range": "Current", "year_start": 2025, "year_end": 2025, "granularity": "Facility", "description": "FQHC and Look-Alike service-delivery sites with locations, hours, and county/region/district codes.", "rows": 18880},
         {"name": "HRSA UDS — FQHC Patients Served (cleaned)", "agency": "HRSA", "category": "Health Centers", "year_range": "2024", "year_start": 2024, "year_end": 2024, "granularity": "Health center awardee", "description": "FQHC awardee patients served, demographics, insurance mix, and visit counts (32.4M total patients).", "rows": 1359},
-        {"name": "HRSA UDS — H80 raw archive", "agency": "HRSA", "category": "Health Centers", "year_range": "2024", "year_start": 2024, "year_end": 2024, "granularity": "Health center awardee", "description": "Full UDS reporting workbook with 37 source tables (chronic conditions, procedures, financials).", "rows": 37},
+        # NOTE: the "HRSA UDS — H80 raw archive" entry was removed here — it
+        # is the raw .xlsx workbook backing the cleaned hrsa_uds dataset
+        # above, NOT an independent dataset_registry row. Dropping it makes
+        # this curated list mirror the 98-row registry exactly so the
+        # Sources count agrees with the header banner. See feature/
+        # sources-tab-sync handoff.
         {"name": "HRSA Grants", "agency": "HRSA", "category": "Federal Grants", "year_range": "Multi-year", "year_start": 2010, "year_end": 2025, "granularity": "Grantee", "description": "Federal financial assistance awarded by HRSA (Health Centers, MCH, Workforce, Ryan White, etc.).", "rows": 114289},
         {"name": "HRSA Maternal & Child Health (Title V)", "agency": "HRSA", "category": "Maternal/Child Health", "year_range": "Multi-year", "year_start": 2014, "year_end": 2024, "granularity": "State × Measure × Stratifier", "description": "Title V National Performance and Outcome Measures across the MCH lifecourse.", "rows": 630430},
         {"name": "HRSA Ryan White HIV/AIDS Program", "agency": "HRSA", "category": "HIV/AIDS", "year_range": "Current", "year_start": 2024, "year_end": 2025, "granularity": "Recipient", "description": "Ryan White recipients and sub-recipients with HAB Provider Type and indicators for Parts A–F funding.", "rows": 2200},
@@ -1810,11 +1867,36 @@ with tab4:
         {"name": "CDC Alzheimer's & Healthy Aging", "agency": "CDC", "category": "Aging Services", "year_range": "2015–2022", "year_start": 2015, "year_end": 2022, "granularity": "State × Topic", "description": "BRFSS-based older-adult indicators: subjective cognitive decline, caregiver burden/duration/intensity, frequent mental distress; deliberately excludes overlap with brfss_state_prevalence.", "rows": 69859},
         {"name": "SAMHSA N-MHSS State Profiles", "agency": "SAMHSA", "category": "Behavioral Health", "year_range": "2023", "year_start": 2023, "year_end": 2023, "granularity": "State", "description": "National Mental Health Services Survey state aggregates: facility counts by type, bed capacity (88,893 beds nationally), treatment approaches, payer mix.", "rows": 54},
         {"name": "CMS SNF Quality Reporting Program", "agency": "CMS", "category": "Long-term Care", "year_range": "Mar 2026 release", "year_start": 2022, "year_end": 2025, "granularity": "Facility × Measure", "description": "SNF QRP underlying measure scores (PPR-PD readmission, MSPB spending efficiency, IMPACT Act outcomes, HAI risk-standardized) — distinct from cms_nursing_home's rolled-up 5-stars.", "rows": 838071},
+        # Tier-2 / lens-view datasets (82–99) — present in dataset_registry
+        # but never added to this curated list, which is why Sources said
+        # "81" while the header banner (registry-driven) said 98. Agency /
+        # category / row counts are the registry-canonical values; year
+        # spans use the dataset's real coverage (registry where set, else
+        # the verified vintage). MANIFEST.md has no entries for any of
+        # these — descriptions authored from the ingested schemas.
+        {"name": "AAMC Physician Workforce (AMA PPD)", "agency": "AAMC", "category": "Workforce", "year_range": "2012", "year_start": 2012, "year_end": 2012, "granularity": "State + National", "description": "Active physicians per 100,000 population by state and physician group from AAMC State Physician Workforce Data (AMA Physician Professional Data, 2012 vintage). Licensee headcount, not employment-based; supplies the CA-vs-US workforce context in the CA Workforce Atlas.", "rows": 1243},
+        {"name": "BLS OEWS — Occupational Employment & Wages", "agency": "BLS", "category": "Workforce", "year_range": "May 2024", "year_start": 2024, "year_end": 2024, "granularity": "State × SOC occupation", "description": "BLS Occupational Employment & Wage Statistics: employment counts and wage percentiles (10/25/50/75/90) for all occupations by state — the full-economy superset of the healthcare-filtered OES extract.", "rows": 37609},
+        {"name": "CA HCAI Physicians by Specialty & Activity", "agency": "CA HCAI", "category": "Workforce", "year_range": "2025", "year_start": 2025, "year_end": 2025, "granularity": "CA county × specialty", "description": "California HCAI licensed-physician headcount by county, specialty, and activity category (Patient Care, Administration, Training) with activity-hours buckets — the supply backbone of the CA Workforce Atlas.", "rows": 25715},
+        {"name": "CA HCAI Physician Supply × PQI Outcomes", "agency": "CA HCAI", "category": "Workforce", "year_range": "2022", "year_start": 2022, "year_end": 2022, "granularity": "CA county × PQI condition", "description": "California HCAI pairing of county ambulatory-care physician supply rates with AHRQ Prevention Quality Indicator (preventable-hospitalization) rates, county vs state, per PQI condition — the analytical core of the CA Workforce Atlas.", "rows": 406},
+        {"name": "CDC ArboNET — Vector-Borne Disease Surveillance", "agency": "CDC", "category": "Communicable Disease", "year_range": "2022–2026", "year_start": 2022, "year_end": 2026, "granularity": "State × disease (weekly)", "description": "CDC ArboNET weekly surveillance of domestic vector-borne disease (West Nile, dengue, EEE, La Crosse, Powassan, Zika) by state, with cumulative and current-week case counts.", "rows": 188650},
+        {"name": "CDC FluView ILINet — Respiratory Surveillance", "agency": "CDC", "category": "Communicable Disease", "year_range": "2015–2026", "year_start": 2015, "year_end": 2026, "granularity": "State (weekly epiweek)", "description": "CDC FluView ILINet weekly outpatient influenza-like-illness surveillance: weighted/unweighted ILI %, patient and provider counts, by state and MMWR epiweek.", "rows": 28642},
+        {"name": "CDC FoodNet — Foodborne Pathogen Surveillance", "agency": "CDC", "category": "Communicable Disease", "year_range": "1996–2024", "year_start": 1996, "year_end": 2024, "granularity": "Pathogen × year (10 sites)", "description": "CDC FoodNet foodborne-pathogen incidence (Salmonella, Campylobacter, STEC, Listeria, Vibrio) per 100k with hospitalizations and deaths across the 10 FoodNet sites; flags the 2024 Campylobacter methodology break.", "rows": 369},
+        {"name": "CDC HAN — Health Alert Network Advisories", "agency": "CDC", "category": "Surveillance", "year_range": "2023–2026", "year_start": 2023, "year_end": 2026, "granularity": "National advisory", "description": "CDC Health Alert Network advisory archive: every HAN message with type (Alert/Advisory/Update), pathogen and geographic mentions, topics, and source URL. The live anchor for the Outbreak Watch dashboard.", "rows": 43},
+        {"name": "CDC National Outbreak Reporting System (NORS)", "agency": "CDC", "category": "Communicable Disease", "year_range": "1971–2023", "year_start": 1971, "year_end": 2023, "granularity": "State × year × outbreak", "description": "CDC NORS reported enteric/respiratory outbreaks by year, state, primary transmission mode, etiology, and setting with illness/hospitalization/death counts.", "rows": 66713},
+        {"name": "CDC/ATSDR Social Vulnerability Index (tract)", "agency": "CDC/ATSDR", "category": "Social Determinants", "year_range": "2022", "year_start": 2022, "year_end": 2022, "granularity": "Census tract", "description": "CDC/ATSDR Social Vulnerability Index 2022 at census-tract resolution — overall percentile plus the four thematic sub-scores and underlying indicators; the higher-resolution companion to the county SVI file.", "rows": 84120},
+        {"name": "CMS Care Compare — NH Health Deficiencies", "agency": "CMS", "category": "Accountability", "year_range": "Through Mar 2026", "year_start": 2017, "year_end": 2026, "granularity": "Facility × deficiency", "description": "Every health deficiency cited at a Medicare/Medicaid nursing home — F-tag, Scope/Severity code, survey date, correction status — from CMS Nursing Home Care Compare. Powers the Provider Accountability view.", "rows": 418148},
+        {"name": "CMS Care Compare — NH Penalties", "agency": "CMS", "category": "Accountability", "year_range": "2023–2026", "year_start": 2023, "year_end": 2026, "granularity": "Facility × penalty", "description": "Federal enforcement actions against nursing homes — Civil Money Penalty fines and payment-denial actions with dates and amounts — from CMS Nursing Home Care Compare.", "rows": 16832},
+        {"name": "CMS Citation Code Look-up (F-tags)", "agency": "CMS", "category": "Reference", "year_range": "Reference (current)", "year_start": 2026, "year_end": 2026, "granularity": "F-tag code", "description": "Reference lookup decoding nursing-home deficiency F-tags (prefix + tag number) to plain-English descriptions and deficiency categories.", "rows": 643},
+        {"name": "CMS NPPES Provider Registry", "agency": "CMS", "category": "Workforce", "year_range": "Apr 2026 snapshot", "year_start": 2026, "year_end": 2026, "granularity": "Provider (NPI)", "description": "CMS NPPES national provider registry — every NPI with taxonomy, individual/organization type, and practice location. The authoritative U.S. provider-identifier file (~9.5M records).", "rows": 9494438},
+        {"name": "DOJ False Claims Act Fraud Statistics", "agency": "DOJ", "category": "Accountability", "year_range": "1987–2025", "year_start": 1987, "year_end": 2025, "granularity": "Fiscal year × sector", "description": "DOJ Fraud Statistics: annual False Claims Act recoveries, settlements/judgments, and new matters by sector (health care, defense, other), 1987–2025.", "rows": 1560},
+        {"name": "HRSA NPDB — Malpractice & Adverse Actions", "agency": "HRSA-NPDB", "category": "Accountability", "year_range": "Through 2025", "year_start": 2004, "year_end": 2025, "granularity": "Report (practitioner action)", "description": "HRSA National Practitioner Data Bank Public Use File — de-identified malpractice payment and adverse-action reports against practitioners (~1.9M records).", "rows": 1895122},
+        {"name": "OIG LEIE — Excluded Individuals & Entities", "agency": "HHS-OIG", "category": "Accountability", "year_range": "Current roster", "year_start": 2026, "year_end": 2026, "granularity": "Excluded entity", "description": "HHS-OIG List of Excluded Individuals/Entities — parties currently barred from federal health-care program participation, with exclusion type, specialty, and reinstatement data.", "rows": 83256},
+        {"name": "State Healthcare Risk Index", "agency": "Composite", "category": "Risk", "year_range": "Composite (current)", "year_start": 2026, "year_end": 2026, "granularity": "State", "description": "Composite state healthcare-risk index blending spending, supply, shortage, disease burden, insurance, hospital quality, and poverty dimensions into a 0–100 score; drives the national Risk Map.", "rows": 51},
     ]
 
     df_sources = pd.DataFrame(DATASETS)
 
-    # KPIs across all 81 datasets (computed BEFORE filtering)
+    # KPIs across all datasets (computed BEFORE filtering)
     total_rows = int(df_sources["rows"].sum())
     year_start_min = int(df_sources["year_start"].min())
     year_end_max = min(int(df_sources["year_end"].max()), 2026)
@@ -1826,9 +1908,13 @@ with tab4:
 
     st.divider()
 
-    col_f1, col_f2 = st.columns([2, 1])
+    col_f1, col_f2, col_f3 = st.columns([2, 1, 1])
     search_q = col_f1.text_input("Search (matches name, agency, or category)", "", key="ds_search")
-    category_choice = col_f2.selectbox(
+    agency_choice = col_f2.selectbox(
+        "Agency", options=["All"] + sorted(df_sources["agency"].unique().tolist()),
+        key="ds_agency",
+    )
+    category_choice = col_f3.selectbox(
         "Category", options=["All"] + sorted(df_sources["category"].unique().tolist()),
         key="ds_category",
     )
@@ -1841,6 +1927,8 @@ with tab4:
             | filtered_sources["category"].str.lower().str.contains(q, na=False)
         )
         filtered_sources = filtered_sources[mask]
+    if agency_choice != "All":
+        filtered_sources = filtered_sources[filtered_sources["agency"] == agency_choice]
     if category_choice != "All":
         filtered_sources = filtered_sources[filtered_sources["category"] == category_choice]
 
@@ -1852,7 +1940,7 @@ with tab4:
         "rows": "Rows", "description": "Description",
     })
     st.dataframe(
-        display, use_container_width=True, hide_index=True,
+        display, width='stretch', hide_index=True,
         column_config={
             "Rows": st.column_config.NumberColumn("Rows", format="%d"),
             "Description": st.column_config.TextColumn("Description", width="large"),
@@ -1867,4 +1955,18 @@ with tab4:
         "Inventory hand-curated from `data/MANIFEST.md`. Year ranges marked 'Current' or "
         "'Multi-year' use a best estimate of the dataset's coverage window for the year-span KPI. "
         "Row counts reflect the cleaned files on disk at fetch time."
+    )
+
+
+# ======================================================================
+# Global footer — rendered once below the tab strip, visible on every tab
+# ======================================================================
+with st.container():
+    st.markdown('<div class="hei-rule" style="margin:28px 0 6px 0;"></div>',
+                unsafe_allow_html=True)
+    st.caption(
+        "Lighthouse Open Health · Built by Venura Wijenayake at L2A · "
+        "Federal data only · Not for clinical use · "
+        "[github.com/Venura-Wijenayake/Healthcare-expenditure-explorer]"
+        "(https://github.com/Venura-Wijenayake/Healthcare-expenditure-explorer)"
     )
