@@ -83,7 +83,8 @@ def get_inventory_stats() -> dict:
     stats = _pg_inventory_stats()
     if stats and stats.get("n_datasets"):
         return stats
-    return {"n_datasets": 98, "total_rows": 17_684_243, "n_agencies": 16}
+    # Non-stale snapshot (captured 2026-05, post agency-metadata backfill).
+    return {"n_datasets": 98, "total_rows": 17_684_243, "n_agencies": 27}
 
 
 _row_count_seen: set[str] = set()

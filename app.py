@@ -13,10 +13,10 @@ from ai_analyst import (
     DATASET_DISPLAY,
     SUMMARIZERS,
 )
-from views import ca_workforce_atlas
+from views import ca_workforce_atlas, accountability, outbreak_watch
 
 st.set_page_config(
-    page_title="U.S. Healthcare Intelligence Platform",
+    page_title="Lighthouse Open Health",
     page_icon="🏥",
     layout="wide",
 )
@@ -496,9 +496,9 @@ header_left, header_right = st.columns([3, 2])
 with header_left:
     st.markdown(
         f"""
-        <div class="hei-eyebrow">U.S. HEALTHCARE INTELLIGENCE PLATFORM</div>
-        <h1 class="hei-title">Healthcare Intelligence</h1>
-        <div class="hei-subtitle">{_inv_n} federal datasets · AI-powered analysis · Updated through 2026</div>
+        <div class="hei-eyebrow">LIGHTHOUSE OPEN HEALTH</div>
+        <h1 class="hei-title">Lighthouse Open Health</h1>
+        <div class="hei-subtitle">An open-source Living Systematic Review of U.S. healthcare data · {_inv_n} federal datasets · AI-powered analysis</div>
         """,
         unsafe_allow_html=True,
     )
@@ -533,8 +533,8 @@ df = df.dropna(subset=["Tot_Spndng"])
 with st.sidebar:
     st.markdown(
         '<div style="display:flex;align-items:center;gap:8px;margin-top:4px;">'
-        '<span style="font-size:1.2rem;">🏥</span>'
-        '<span style="font-family:Space Grotesk;font-size:0.9rem;font-weight:600;color:var(--text-primary);">HEI Platform</span>'
+        '<span style="font-size:1.2rem;">🕯️</span>'
+        '<span style="font-family:Space Grotesk;font-size:0.9rem;font-weight:600;color:var(--text-primary);">Lighthouse Open Health</span>'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -995,9 +995,11 @@ def render_dataset_view(dataset_key: str, state_filter: str | None,
 # Display order puts the demo headline view second; the tabN variable
 # names stay bound to their existing `with tabN:` blocks below (tab2 is
 # still AI Analyst, etc.) so nothing downstream needs to change.
-tab1, tab_atlas, tab2, tab3, tab4 = st.tabs([
+tab1, tab_atlas, tab_acct, tab_outbreak, tab2, tab3, tab4 = st.tabs([
     "🗺️  Risk Map",
     "🩺  CA Workforce Atlas",
+    "🏛️  Accountability",
+    "👁️  Outbreak Watch",
     "🧠  AI Analyst",
     "📊  Explore",
     "📚  Sources",
@@ -1006,11 +1008,47 @@ tab1, tab_atlas, tab2, tab3, tab4 = st.tabs([
 with tab_atlas:
     ca_workforce_atlas.render()
 
+with tab_acct:
+    accountability.render()
+
+with tab_outbreak:
+    outbreak_watch.render()
+
 
 # ======================================================================
 # TAB 1 — Risk Map (Geography + Compare States)
 # ======================================================================
 with tab1:
+    with st.expander("About Lighthouse Open Health", expanded=False):
+        st.markdown(
+            "Lighthouse Open Health is an open-source platform that makes "
+            "the full corpus of federally-disclosed U.S. healthcare data "
+            "queryable in one place. Federal health data — Medicare "
+            "spending, physician workforce, disease surveillance, "
+            "nursing-home enforcement records, FCA fraud recoveries — "
+            "currently lives across dozens of agency sites, in dozens of "
+            "formats, with no unified lookup. This platform is a Living "
+            "Systematic Review: every public datapoint is recallable, "
+            "cross-referenceable, and AI-assisted, with full raw data "
+            "preserved (no pre-computed summaries).\n\n"
+            "Three analytical lenses anchor the platform:\n\n"
+            "- **Outbreak Watch** — what disease threats CDC is warning "
+            "about right now, cross-referenced with active national "
+            "surveillance feeds\n"
+            "- **CA Workforce Atlas** — where in California the next "
+            "clinician matters most, mapping physician supply against "
+            "preventable-hospitalization outcomes\n"
+            "- **Provider Accountability** — federally-disclosed nursing "
+            "home enforcement records (citations, fines, quality "
+            "measures) for any of ~15,000 U.S. facilities in one lookup\n\n"
+            "Built by Venura Wijenayake (Technical Director, Learn to "
+            "Achieve) — a California 501(c)(3) public-benefit nonprofit. "
+            "Source code and contribution guide: "
+            "[github.com/Venura-Wijenayake/Healthcare-expenditure-explorer]"
+            "(https://github.com/Venura-Wijenayake/Healthcare-expenditure-explorer).\n\n"
+            "_Federal data only. Not for clinical use. Public-data "
+            "attribution preserved on every panel._"
+        )
     view = st.radio(
         "View",
         ["🗺️ National Risk Map", "🔍 State Comparator"],
@@ -1718,11 +1756,11 @@ with tab3:
 # ======================================================================
 with tab4:
     st.markdown(
-        '<div class="hei-intro">The U.S. Healthcare Intelligence Platform '
+        '<div class="hei-intro">Lighthouse Open Health '
         f"aggregates {_inv_n} federal datasets from {_inv_ag} agencies into a single "
-        "queryable intelligence layer. This platform is open source — "
-        "contributors can add datasets by following the contributor "
-        "guide in the GitHub repository.</div>",
+        "queryable Living Systematic Review of U.S. healthcare data. This "
+        "platform is open source — contributors can add datasets by "
+        "following the contributor guide in the GitHub repository.</div>",
         unsafe_allow_html=True,
     )
     st.subheader("📚 Data Sources")
@@ -1764,7 +1802,12 @@ with tab4:
         {"name": "HPSA — Mental Health", "agency": "HRSA", "category": "Provider Shortage", "year_range": "Current", "year_start": 2025, "year_end": 2025, "granularity": "HPSA designation", "description": "Mental health HPSA designations using the same schema as Primary Care.", "rows": 39517},
         {"name": "HRSA FQHC Site Roster", "agency": "HRSA", "category": "Health Centers", "year_range": "Current", "year_start": 2025, "year_end": 2025, "granularity": "Facility", "description": "FQHC and Look-Alike service-delivery sites with locations, hours, and county/region/district codes.", "rows": 18880},
         {"name": "HRSA UDS — FQHC Patients Served (cleaned)", "agency": "HRSA", "category": "Health Centers", "year_range": "2024", "year_start": 2024, "year_end": 2024, "granularity": "Health center awardee", "description": "FQHC awardee patients served, demographics, insurance mix, and visit counts (32.4M total patients).", "rows": 1359},
-        {"name": "HRSA UDS — H80 raw archive", "agency": "HRSA", "category": "Health Centers", "year_range": "2024", "year_start": 2024, "year_end": 2024, "granularity": "Health center awardee", "description": "Full UDS reporting workbook with 37 source tables (chronic conditions, procedures, financials).", "rows": 37},
+        # NOTE: the "HRSA UDS — H80 raw archive" entry was removed here — it
+        # is the raw .xlsx workbook backing the cleaned hrsa_uds dataset
+        # above, NOT an independent dataset_registry row. Dropping it makes
+        # this curated list mirror the 98-row registry exactly so the
+        # Sources count agrees with the header banner. See feature/
+        # sources-tab-sync handoff.
         {"name": "HRSA Grants", "agency": "HRSA", "category": "Federal Grants", "year_range": "Multi-year", "year_start": 2010, "year_end": 2025, "granularity": "Grantee", "description": "Federal financial assistance awarded by HRSA (Health Centers, MCH, Workforce, Ryan White, etc.).", "rows": 114289},
         {"name": "HRSA Maternal & Child Health (Title V)", "agency": "HRSA", "category": "Maternal/Child Health", "year_range": "Multi-year", "year_start": 2014, "year_end": 2024, "granularity": "State × Measure × Stratifier", "description": "Title V National Performance and Outcome Measures across the MCH lifecourse.", "rows": 630430},
         {"name": "HRSA Ryan White HIV/AIDS Program", "agency": "HRSA", "category": "HIV/AIDS", "year_range": "Current", "year_start": 2024, "year_end": 2025, "granularity": "Recipient", "description": "Ryan White recipients and sub-recipients with HAB Provider Type and indicators for Parts A–F funding.", "rows": 2200},
@@ -1824,6 +1867,31 @@ with tab4:
         {"name": "CDC Alzheimer's & Healthy Aging", "agency": "CDC", "category": "Aging Services", "year_range": "2015–2022", "year_start": 2015, "year_end": 2022, "granularity": "State × Topic", "description": "BRFSS-based older-adult indicators: subjective cognitive decline, caregiver burden/duration/intensity, frequent mental distress; deliberately excludes overlap with brfss_state_prevalence.", "rows": 69859},
         {"name": "SAMHSA N-MHSS State Profiles", "agency": "SAMHSA", "category": "Behavioral Health", "year_range": "2023", "year_start": 2023, "year_end": 2023, "granularity": "State", "description": "National Mental Health Services Survey state aggregates: facility counts by type, bed capacity (88,893 beds nationally), treatment approaches, payer mix.", "rows": 54},
         {"name": "CMS SNF Quality Reporting Program", "agency": "CMS", "category": "Long-term Care", "year_range": "Mar 2026 release", "year_start": 2022, "year_end": 2025, "granularity": "Facility × Measure", "description": "SNF QRP underlying measure scores (PPR-PD readmission, MSPB spending efficiency, IMPACT Act outcomes, HAI risk-standardized) — distinct from cms_nursing_home's rolled-up 5-stars.", "rows": 838071},
+        # Tier-2 / lens-view datasets (82–99) — present in dataset_registry
+        # but never added to this curated list, which is why Sources said
+        # "81" while the header banner (registry-driven) said 98. Agency /
+        # category / row counts are the registry-canonical values; year
+        # spans use the dataset's real coverage (registry where set, else
+        # the verified vintage). MANIFEST.md has no entries for any of
+        # these — descriptions authored from the ingested schemas.
+        {"name": "AAMC Physician Workforce (AMA PPD)", "agency": "AAMC", "category": "Workforce", "year_range": "2012", "year_start": 2012, "year_end": 2012, "granularity": "State + National", "description": "Active physicians per 100,000 population by state and physician group from AAMC State Physician Workforce Data (AMA Physician Professional Data, 2012 vintage). Licensee headcount, not employment-based; supplies the CA-vs-US workforce context in the CA Workforce Atlas.", "rows": 1243},
+        {"name": "BLS OEWS — Occupational Employment & Wages", "agency": "BLS", "category": "Workforce", "year_range": "May 2024", "year_start": 2024, "year_end": 2024, "granularity": "State × SOC occupation", "description": "BLS Occupational Employment & Wage Statistics: employment counts and wage percentiles (10/25/50/75/90) for all occupations by state — the full-economy superset of the healthcare-filtered OES extract.", "rows": 37609},
+        {"name": "CA HCAI Physicians by Specialty & Activity", "agency": "CA HCAI", "category": "Workforce", "year_range": "2025", "year_start": 2025, "year_end": 2025, "granularity": "CA county × specialty", "description": "California HCAI licensed-physician headcount by county, specialty, and activity category (Patient Care, Administration, Training) with activity-hours buckets — the supply backbone of the CA Workforce Atlas.", "rows": 25715},
+        {"name": "CA HCAI Physician Supply × PQI Outcomes", "agency": "CA HCAI", "category": "Workforce", "year_range": "2022", "year_start": 2022, "year_end": 2022, "granularity": "CA county × PQI condition", "description": "California HCAI pairing of county ambulatory-care physician supply rates with AHRQ Prevention Quality Indicator (preventable-hospitalization) rates, county vs state, per PQI condition — the analytical core of the CA Workforce Atlas.", "rows": 406},
+        {"name": "CDC ArboNET — Vector-Borne Disease Surveillance", "agency": "CDC", "category": "Communicable Disease", "year_range": "2022–2026", "year_start": 2022, "year_end": 2026, "granularity": "State × disease (weekly)", "description": "CDC ArboNET weekly surveillance of domestic vector-borne disease (West Nile, dengue, EEE, La Crosse, Powassan, Zika) by state, with cumulative and current-week case counts.", "rows": 188650},
+        {"name": "CDC FluView ILINet — Respiratory Surveillance", "agency": "CDC", "category": "Communicable Disease", "year_range": "2015–2026", "year_start": 2015, "year_end": 2026, "granularity": "State (weekly epiweek)", "description": "CDC FluView ILINet weekly outpatient influenza-like-illness surveillance: weighted/unweighted ILI %, patient and provider counts, by state and MMWR epiweek.", "rows": 28642},
+        {"name": "CDC FoodNet — Foodborne Pathogen Surveillance", "agency": "CDC", "category": "Communicable Disease", "year_range": "1996–2024", "year_start": 1996, "year_end": 2024, "granularity": "Pathogen × year (10 sites)", "description": "CDC FoodNet foodborne-pathogen incidence (Salmonella, Campylobacter, STEC, Listeria, Vibrio) per 100k with hospitalizations and deaths across the 10 FoodNet sites; flags the 2024 Campylobacter methodology break.", "rows": 369},
+        {"name": "CDC HAN — Health Alert Network Advisories", "agency": "CDC", "category": "Surveillance", "year_range": "2023–2026", "year_start": 2023, "year_end": 2026, "granularity": "National advisory", "description": "CDC Health Alert Network advisory archive: every HAN message with type (Alert/Advisory/Update), pathogen and geographic mentions, topics, and source URL. The live anchor for the Outbreak Watch dashboard.", "rows": 43},
+        {"name": "CDC National Outbreak Reporting System (NORS)", "agency": "CDC", "category": "Communicable Disease", "year_range": "1971–2023", "year_start": 1971, "year_end": 2023, "granularity": "State × year × outbreak", "description": "CDC NORS reported enteric/respiratory outbreaks by year, state, primary transmission mode, etiology, and setting with illness/hospitalization/death counts.", "rows": 66713},
+        {"name": "CDC/ATSDR Social Vulnerability Index (tract)", "agency": "CDC/ATSDR", "category": "Social Determinants", "year_range": "2022", "year_start": 2022, "year_end": 2022, "granularity": "Census tract", "description": "CDC/ATSDR Social Vulnerability Index 2022 at census-tract resolution — overall percentile plus the four thematic sub-scores and underlying indicators; the higher-resolution companion to the county SVI file.", "rows": 84120},
+        {"name": "CMS Care Compare — NH Health Deficiencies", "agency": "CMS", "category": "Accountability", "year_range": "Through Mar 2026", "year_start": 2017, "year_end": 2026, "granularity": "Facility × deficiency", "description": "Every health deficiency cited at a Medicare/Medicaid nursing home — F-tag, Scope/Severity code, survey date, correction status — from CMS Nursing Home Care Compare. Powers the Provider Accountability view.", "rows": 418148},
+        {"name": "CMS Care Compare — NH Penalties", "agency": "CMS", "category": "Accountability", "year_range": "2023–2026", "year_start": 2023, "year_end": 2026, "granularity": "Facility × penalty", "description": "Federal enforcement actions against nursing homes — Civil Money Penalty fines and payment-denial actions with dates and amounts — from CMS Nursing Home Care Compare.", "rows": 16832},
+        {"name": "CMS Citation Code Look-up (F-tags)", "agency": "CMS", "category": "Reference", "year_range": "Reference (current)", "year_start": 2026, "year_end": 2026, "granularity": "F-tag code", "description": "Reference lookup decoding nursing-home deficiency F-tags (prefix + tag number) to plain-English descriptions and deficiency categories.", "rows": 643},
+        {"name": "CMS NPPES Provider Registry", "agency": "CMS", "category": "Workforce", "year_range": "Apr 2026 snapshot", "year_start": 2026, "year_end": 2026, "granularity": "Provider (NPI)", "description": "CMS NPPES national provider registry — every NPI with taxonomy, individual/organization type, and practice location. The authoritative U.S. provider-identifier file (~9.5M records).", "rows": 9494438},
+        {"name": "DOJ False Claims Act Fraud Statistics", "agency": "DOJ", "category": "Accountability", "year_range": "1987–2025", "year_start": 1987, "year_end": 2025, "granularity": "Fiscal year × sector", "description": "DOJ Fraud Statistics: annual False Claims Act recoveries, settlements/judgments, and new matters by sector (health care, defense, other), 1987–2025.", "rows": 1560},
+        {"name": "HRSA NPDB — Malpractice & Adverse Actions", "agency": "HRSA-NPDB", "category": "Accountability", "year_range": "Through 2025", "year_start": 2004, "year_end": 2025, "granularity": "Report (practitioner action)", "description": "HRSA National Practitioner Data Bank Public Use File — de-identified malpractice payment and adverse-action reports against practitioners (~1.9M records).", "rows": 1895122},
+        {"name": "OIG LEIE — Excluded Individuals & Entities", "agency": "HHS-OIG", "category": "Accountability", "year_range": "Current roster", "year_start": 2026, "year_end": 2026, "granularity": "Excluded entity", "description": "HHS-OIG List of Excluded Individuals/Entities — parties currently barred from federal health-care program participation, with exclusion type, specialty, and reinstatement data.", "rows": 83256},
+        {"name": "State Healthcare Risk Index", "agency": "Composite", "category": "Risk", "year_range": "Composite (current)", "year_start": 2026, "year_end": 2026, "granularity": "State", "description": "Composite state healthcare-risk index blending spending, supply, shortage, disease burden, insurance, hospital quality, and poverty dimensions into a 0–100 score; drives the national Risk Map.", "rows": 51},
     ]
 
     df_sources = pd.DataFrame(DATASETS)
@@ -1840,9 +1908,13 @@ with tab4:
 
     st.divider()
 
-    col_f1, col_f2 = st.columns([2, 1])
+    col_f1, col_f2, col_f3 = st.columns([2, 1, 1])
     search_q = col_f1.text_input("Search (matches name, agency, or category)", "", key="ds_search")
-    category_choice = col_f2.selectbox(
+    agency_choice = col_f2.selectbox(
+        "Agency", options=["All"] + sorted(df_sources["agency"].unique().tolist()),
+        key="ds_agency",
+    )
+    category_choice = col_f3.selectbox(
         "Category", options=["All"] + sorted(df_sources["category"].unique().tolist()),
         key="ds_category",
     )
@@ -1855,6 +1927,8 @@ with tab4:
             | filtered_sources["category"].str.lower().str.contains(q, na=False)
         )
         filtered_sources = filtered_sources[mask]
+    if agency_choice != "All":
+        filtered_sources = filtered_sources[filtered_sources["agency"] == agency_choice]
     if category_choice != "All":
         filtered_sources = filtered_sources[filtered_sources["category"] == category_choice]
 
@@ -1881,4 +1955,18 @@ with tab4:
         "Inventory hand-curated from `data/MANIFEST.md`. Year ranges marked 'Current' or "
         "'Multi-year' use a best estimate of the dataset's coverage window for the year-span KPI. "
         "Row counts reflect the cleaned files on disk at fetch time."
+    )
+
+
+# ======================================================================
+# Global footer — rendered once below the tab strip, visible on every tab
+# ======================================================================
+with st.container():
+    st.markdown('<div class="hei-rule" style="margin:28px 0 6px 0;"></div>',
+                unsafe_allow_html=True)
+    st.caption(
+        "Lighthouse Open Health · Built by Venura Wijenayake at L2A · "
+        "Federal data only · Not for clinical use · "
+        "[github.com/Venura-Wijenayake/Healthcare-expenditure-explorer]"
+        "(https://github.com/Venura-Wijenayake/Healthcare-expenditure-explorer)"
     )

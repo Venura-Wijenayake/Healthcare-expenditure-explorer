@@ -336,13 +336,17 @@ def _panel_priority(county: str, sp: pd.DataFrame) -> None:
     })
     st.dataframe(show, width='stretch', hide_index=True)
     st.caption(
-        "Sorted by absolute preventable-hospitalization-rate difference. "
-        "Note: Community-Acquired Pneumonia (2.41× state mean) and Urinary "
-        "Tract Infection (2.29×) show larger *relative* excess than Heart "
-        "Failure (2.05×), but Heart Failure carries the largest absolute "
-        "case-rate gap — the operational priority signal for capacity "
-        "planning."
+        "Sorted by absolute preventable-hospitalization-rate difference "
+        "(County PQI − State PQI), Low-supply domains first."
     )
+    if county == _FEATURED:
+        st.caption(
+            "Note (Glenn): Community-Acquired Pneumonia (2.41× state mean) "
+            "and Urinary Tract Infection (2.29×) show larger *relative* "
+            "excess than Heart Failure (2.05×), but Heart Failure carries "
+            "the largest absolute case-rate gap — the operational priority "
+            "signal for capacity planning."
+        )
     with st.expander("Methodology"):
         st.markdown(
             "AHRQ Prevention Quality Indicators (PQIs) are conditions for "

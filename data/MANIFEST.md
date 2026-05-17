@@ -1,4 +1,4 @@
-# U.S. Healthcare Intelligence Platform — Data Manifest
+# Lighthouse Open Health — Data Manifest
 
 The `data/` directory is gitignored. This manifest documents every dataset, its source, and how to re-fetch it. To rebuild the data layer from scratch, follow the URLs below or run the corresponding script in `scripts/`.
 
